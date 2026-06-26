@@ -703,7 +703,7 @@ function parseGpx(text, name) {
   const totalKm = (courseDistances.at(-1)/1000).toFixed(2);
   courseLayer.clearLayers();
   const ll = coursePoints.map(p => [p.lat, p.lon]);
-  L.polyline(ll, { color:'#ff6f91', weight:10, opacity:0.95 }).addTo(courseLayer);
+  L.polyline(ll, { color:'#56eef4', weight:10, opacity:0.95 }).addTo(courseLayer);
   L.marker(ll[0], { icon: emojiIcon('🚥', 32) }).bindPopup('<b>Start</b>').addTo(courseLayer);
   L.marker(ll.at(-1), { icon: emojiIcon('🏁', 32) }).bindPopup('<b>Finish</b>').addTo(courseLayer);
   map.fitBounds(L.polyline(ll).getBounds(), { padding:[40,40] });
