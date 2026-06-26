@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Race Tracker - PoC</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <style>
+    /* CSS Variables for Themes */
+    :root {
+      --bg-body: #f5f5f3;
+      --text-body: #1a1a1a;
+      --bg-card: #fff;
+      --border-card: rgba(0,0,0,0.12);
+      --text-muted: #666;
+      --text-ultra-muted: #999;
+      --bg-input: #fff;
+      --border-input: rgba(0,0,0,0.2);
+      --input-focus-border: #378ADD;
+      --input-focus-shadow: rgba(55,138,221,0.15);
+      
+      --btn-bg: transparent;
+      --btn-color: #1a1a1a;
+      --btn-border: rgba(0,0,0,0.2);
+      --btn-hover: #f5f5f3;
+      
+      --btn-primary-bg: #e6f1fb;
+      --btn-primary-color: #185fa5;
+      --btn-primary-border: #b5d4f4;
+      --btn-primary-hover: #b5d4f4;
+      
+      --bg-stat-panel: #f5f5f3;
+      --dropzone-hover-bg: #f0f7ff;
+      --dropzone-hover-color: #185fa5;
+      --dropzone-hover-border: #378ADD;
+    }
+
+
+    body.dark-theme {
+      --bg-body: #450920;          /* Crimson Violet */
+      --text-body: #f9dbbd;          /* Soft Apricot */
+      --bg-card: #55122d;          /* Dark berry variant for cards */
+      --border-card: rgba(249, 219, 189, 0.15);
+      --text-muted: #ffa5ab;       /* Cotton Candy */
+      --text-ultra-muted: #da627d; /* Blush Rose */
+      --bg-input: #450920;
+      --border-input: rgba(218, 98, 125, 0.4);
+      --input-focus-border: #ffa5ab;
+      --input-focus-shadow: rgba(255, 165, 171, 0.25);
+      
+      --btn-bg: transparent;
+      --btn-color: #f9dbbd;
+      --btn-border: rgba(218, 98, 125, 0.4);
+      --btn-hover: #a53860;        /* Cherry Rose */
+      
+      --btn-primary-bg: #a53860;   /* Cherry Rose */
+      --btn-primary-color: #f9dbbd;/* Soft Apricot */
+      --btn-primary-border: #da627d; /* Blush Rose */
+      --btn-primary-hover: #da627d;
+      
+      --bg-stat-panel: #450920;
+      --dropzone-hover-bg: #a53860;
+      --dropzone-hover-color: #f9dbbd;
+      --dropzone-hover-border: #ffa5ab;
+    } 
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: var(--bg-body); color: var(--text-body); padding: 1rem; transition: background 0.3s, color 0.3s; }
+    
+    .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    h1 { font-size: 18px; font-weight: 500; }
+    
+    .card { background: var(--bg-card); border: 0.5px solid var(--border-card); border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1rem; transition: background 0.3s, border-color 0.3s; }
+    .card h2 { font-size: 11px; font-weight: 500; color: var(--text-ultra-muted); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+    .field { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 160px; }
+    label { font-size: 13px; color: var(--text-muted); }
+    
+    input[type=text], input[type=datetime-local], select {
+      width: 100%; padding: 8px 10px; border: 0.5px solid var(--border-input);
+      border-radius: 8px; font-size: 14px; background: var(--bg-input); color: var(--text-body);
+    }
+    input:focus, select:focus { outline: none; border-color: var(--input-focus-border); box-shadow: 0 0 0 2px var(--input-focus-shadow); }
+    
+    .btn { padding: 7px 14px; border: 0.5px solid var(--btn-border); border-radius: 8px; background: var(--btn-bg); color: var(--btn-color); cursor: pointer; font-size: 13px; white-space: nowrap; }
+    .btn:hover { background: var(--btn-hover); }
+    .btn:disabled { opacity: 0.35; cursor: default; }
+    .btn-primary { background: var(--btn-primary-bg); color: var(--btn-primary-color); border-color: var(--btn-primary-border); }
+    .btn-primary:hover:not(:disabled) { background: var(--btn-primary-hover); }
+    .btn-danger { background: #fcebeb; color: #a32d2d; border-color: #f7c1c1; }
+    .btn-danger:hover { background: #f7c1c1; }
+    
+    body.dark-theme .btn-danger { background: #5a1d1d; color: #ffa5ab; border-color: #a32d2d; }
+    body.dark-theme .btn-danger:hover { background: #a32d2d; }
+
+    .status { font-size: 13px; color: var(--text-muted); padding: 3px 0; min-height: 18px; }
+    .status.err  { color: #a32d2d; }
+    .status.ok   { color: #3b6d11; }
+    .status.warn { color: #854f0b; }
+    body.dark-theme .status.err { color: #ffa5ab; }
+    body.dark-theme .status.ok { color: #f9dbbd; }
+    body.dark-theme .status.warn { color: #ffa5ab; }
+
+    .pb-bar { display: flex; flex-direction: column; gap: 10px; }
+    .pb-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .pb-time { font-size: 13px; color: var(--text-body); font-variant-numeric: tabular-nums; min-width: 200px; }
+    .speed-btns { display: flex; gap: 4px; }
+    .speed-btn { padding: 5px 10px; font-size: 12px; border: 0.5px solid var(--btn-border); border-radius: 6px; background: transparent; color: var(--btn-color); cursor: pointer; }
+    .speed-btn:hover { background: var(--btn-hover); }
+    .speed-btn.active { background: var(--btn-primary-bg); color: var(--btn-primary-color); border-color: var(--btn-primary-border); }
+
+    .runner-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .runner-chip { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 13px; border: 0.5px solid var(--btn-border); background: var(--bg-card); color: var(--text-body); cursor: pointer; user-select: none; }
+    .runner-chip.hidden { opacity: 0.35; }
+    .runner-chip .swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .runner-chip .rm { margin-left: 4px; color: var(--text-ultra-muted); font-size: 16px; line-height: 1; }
+    .runner-chip .rm:hover { color: #a32d2d; }
+
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 8px; }
+    .stat { background: var(--bg-stat-panel); border-radius: 8px; padding: 0.65rem 0.9rem; border-left: 3px solid transparent; border-top: 0.5px solid var(--border-card); border-right: 0.5px solid var(--border-card); border-bottom: 0.5px solid var(--border-card); }
+    .stat-label { font-size: 11px; color: var(--text-ultra-muted); margin-bottom: 2px; }
+    .stat-val { font-size: 16px; font-weight: 500; }
+    .stat-sub  { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+    .file-drop { border: 1.5px dashed var(--btn-border); border-radius: 10px; padding: 1rem; text-align: center; color: var(--text-muted); font-size: 14px; cursor: pointer; }
+    .file-drop:hover, .file-drop.over { border-color: var(--dropzone-hover-border); background: var(--dropzone-hover-bg); color: var(--dropzone-hover-color); }
+    .file-drop input { display: none; }
+    .gpx-info { font-size: 13px; color: var(--text-muted); margin-top: 6px; }
+    .gpx-example { font-size: 13px; color: var(--text-ultra-muted); margin-top: 8px; }
+    .gpx-example a { color: var(--text-muted); text-decoration: underline; cursor: pointer; }
+
+    .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); align-items: center; margin-top: 10px; }
+    .legend-item { display: flex; align-items: center; gap: 5px; }
+    .leg-line { width: 20px; height: 3px; border-radius: 2px; }
+    .leg-dot  { width: 10px; height: 10px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px #aaa; }
+
+    /* Accordion */
+    .accordion-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; padding: 0.1rem 0; }
+    .accordion-header h2 { margin-bottom: 0; }
+    .accordion-arrow { font-size: 12px; color: var(--text-ultra-muted); transition: transform 0.2s; flex-shrink: 0; }
+    .accordion-header.open .accordion-arrow { transform: rotate(180deg); }
+    .accordion-body { overflow: hidden; transition: max-height 0.3s ease, opacity 0.3s ease; max-height: 0; opacity: 0; }
+    .accordion-body.open { max-height: 600px; opacity: 1; }
+
+    /* Map + leaderboard side by side */
+    .map-row { display: flex; gap: 12px; margin-bottom: 1rem; align-items: flex-start; }
+    #map { flex: 1; height: 480px; border-radius: 12px; border: 0.5px solid var(--border-card); overflow: hidden; margin-bottom: 0; min-width: 0; }
+
+    /* Leaderboard */
+    .leaderboard-panel {
+      width: 280px; flex-shrink: 0;
+      background: var(--bg-card); border: 0.5px solid var(--border-card); border-radius: 12px;
+      padding: 0.75rem 1rem; height: 480px; display: flex; flex-direction: column;
+    }
+    .leaderboard-panel h2 { font-size: 11px; font-weight: 500; color: var(--text-ultra-muted); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0; }
+    .lb-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+    .lb-row {
+      display: grid;
+      grid-template-columns: 22px 10px 1fr auto auto;
+      align-items: center; gap: 5px;
+      padding: 5px 7px; border-radius: 8px; background: var(--bg-stat-panel);
+      border: 0.5px solid var(--border-card);
+    }
+    .lb-rank { font-size: 13px; font-weight: 600; color: var(--text-ultra-muted); text-align: center; }
+    .lb-rank.gold   { color: #c8900a; }
+    .lb-rank.silver { color: #777; }
+    .lb-rank.bronze { color: #8b4a1c; }
+    body.dark-theme .lb-rank.gold { color: #f9dbbd; }
+    body.dark-theme .lb-rank.silver { color: #ffa5ab; }
+    
+    .lb-swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .lb-name { font-size: 12px; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-body); }
+    .lb-gap  { font-size: 11px; color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; text-align: right; }
+    .lb-gap-leader { color: var(--btn-primary-color); font-weight: 600; }
+    body.dark-theme .lb-gap-leader { color: #ffa5ab; }
+    .lb-gap-na { color: var(--text-ultra-muted); }
+    .lb-arrow { font-size: 10px; width: 12px; text-align: center; }
+    .lb-arrow-up   { color: #27ae60; }
+    .lb-arrow-down { color: #c0392b; }
+    .lb-arrow-flat { color: var(--text-ultra-muted); }
+    .lb-finished { color: #3b6d11; font-weight: 500; }
+    .lb-row-finished { background: #f0f7e8; }
+    body.dark-theme .lb-row-finished { background: #a53860; }
+    .lb-empty { font-size: 13px; color: var(--text-ultra-muted); text-align: center; margin-top: 1rem; }
+
+    .leaflet-control-layers { border-radius: 8px !important; border: 0.5px solid rgba(0,0,0,0.15) !important; box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important; }
+    .marker-tip { font-size: 10px !important; padding: 1px 4px !important; white-space: nowrap; }
+    .marker-tip.leaflet-tooltip { background: rgba(255,255,255,0.88); border: 1px solid rgba(0,0,0,0.15); box-shadow: 0 1px 3px rgba(0,0,0,0.15); border-radius: 3px; }
+    .marker-tip.leaflet-tooltip::before { display: none; }
+    
+    body.dark-theme .leaflet-tooltip { background: #450920 !important; color: #f9dbbd !important; border-color: #da627d !important; }
+
+    /* Header Container alignment */
+    .site-header {
+    display: flex;
+    align-items: center; /* Vertically centers the logo with the text */
+    gap: 0.75rem;        /* Spacing between the logo and the text */
+    padding: 1rem 1.5rem;
+    background-color: var(--bg-card); /* Uses your Indigo Ink background */
+    border-bottom: 1px solid var(--border-card);
+    }
+
+    /* Logo Sizing */
+    .header-logo {
+    height: 2rem;        /* Scales the logo to match standard header text sizes */
+    width: auto;         /* Maintains aspect ratio */
+    object-fit: contain;
+    }
+
+    /* Header Title Typography */
+    .header-title {
+    margin: 0;           /* Removes default h1 margins to prevent misalignment */
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-body); /* Uses your Amber Glow color */
+    }
+  </style>
+</head>
+<body>
+
+<div class="header-container">
+    <header class="site-header">
+        <img src="./images/logoracetracking.png" alt="Race Tracking Logo" class="header-logo">
+        <h1 class="header-title">Race Tracking</h1>
+    </header>
+  <button class="btn btn-primary" onclick="toggleTheme()">🌓</button>
+</div>
+
+<div class="card">
+  <div class="accordion-header open" onclick="toggleAccordion('acc-gpx',this)" id="acc-gpx-hdr">
+    <h2>1 — GPX course</h2>
+    <span class="accordion-arrow">▼</span>
+  </div>
+  <div class="accordion-body open" id="acc-gpx">
+    <div style="margin-top:10px;">
+      <div class="file-drop" id="dropZone"
+           onclick="document.getElementById('gpxFile').click()"
+           ondragover="dz(event,'over')" ondragleave="dz(event,'leave')" ondrop="dz(event,'drop')">
+        <input type="file" id="gpxFile" accept=".gpx" onchange="loadGpx(this.files[0])" />
+        Click or drag &amp; drop a GPX file here
+      </div>
+      <div class="gpx-example">Or select <a onclick="loadGpxUrl('./gpx/cross.gpx', 'cross.gpx')">this cross country example</a></div>
+      <div class="gpx-info" id="gpxInfo"></div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="accordion-header open" onclick="toggleAccordion('acc-runners',this)" id="acc-runners-hdr">
+    <h2>2 — Runners</h2>
+    <span class="accordion-arrow">▼</span>
+  </div>
+  <div class="accordion-body open" id="acc-runners">
+    <div style="margin-top:10px;">
+      <div class="row" style="margin-bottom:10px;">
+        <div class="field">
+          <label>API base URL</label>
+          <input type="text" id="apiBase" value="https://rt-tracking.netlify.app/api/location-get" />
+        </div>
+        <div class="field" style="max-width:170px;">
+          <label>Runner BIB</label>
+          <input type="text" id="runnerId" placeholder="BIB-005" onkeydown="if(event.key==='Enter')addRunner()" />
+        </div>
+        <div style="padding-bottom:2px;">
+          <button class="btn btn-primary" onclick="addRunner()">Add runner</button>
+        </div>
+      </div>
+      <div id="runnerStatus" class="status">Enter a BIB and click Add runner.</div>
+      <div class="runner-list" id="runnerList"></div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>3 — Simulation</h2>
+
+  <div style="margin-bottom:10px;">
+    <div class="accordion-header" onclick="toggleAccordion('acc-timewindow',this)" style="margin-bottom:0;">
+      <span style="font-size:12px;color:var(--text-muted);font-weight:500;letter-spacing:0.03em;text-transform:uppercase;">Time window</span>
+      <span class="accordion-arrow">▼</span>
+    </div>
+    <div class="accordion-body" id="acc-timewindow">
+      <div class="row" style="margin-top:10px;">
+        <div class="field">
+          <label>From</label>
+          <input type="datetime-local" id="pbFrom" step="1" />
+        </div>
+        <div class="field">
+          <label>To</label>
+          <input type="datetime-local" id="pbTo" step="1" />
+        </div>
+        <div style="padding-bottom:2px; display:flex; gap:6px; align-items:flex-end;">
+          <button class="btn btn-primary" onclick="applyWindow()">Apply</button>
+          <button class="btn" onclick="resetWindow()">Reset</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pb-bar">
+    <input type="range" id="pbSlider" min="0" max="10000" value="0" step="1"
+           style="width:100%; accent-color:#378ADD;" oninput="onScrub()" />
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <div class="pb-controls">
+        <button class="btn" onclick="rewind()" title="Rewind to start">⏮</button>
+        <button class="btn btn-primary" id="btnPlay"  onclick="togglePlay()" disabled>▶ Play</button>
+        <button class="btn"             id="btnPause" onclick="togglePlay()" style="display:none;">⏸ Pause</button>
+      </div>
+      <div class="speed-btns">
+        <button class="speed-btn active" onclick="setSpeed(1)"  id="sp1" >×1</button>
+        <button class="speed-btn"        onclick="setSpeed(2)"  id="sp2" >×2</button>
+        <button class="speed-btn"        onclick="setSpeed(5)"  id="sp5" >×5</button>
+        <button class="speed-btn"        onclick="setSpeed(10)" id="sp10">×10</button>
+      </div>
+      <div class="pb-time" id="pbTimeLabel">—</div>
+    </div>
+  </div>
+</div>
+
+<div class="map-row">
+  <div id="map"></div>
+  <div class="leaderboard-panel">
+    <h2>🏆 Classification</h2>
+    <div class="lb-list" id="lbList">
+      <div class="lb-empty" id="lbEmpty">No runners loaded</div>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="profileCard" style="display:none;">
+  <h2>Elevation profile</h2>
+  <div style="position:relative;">
+    <canvas id="profileCanvas" style="width:100%;height:110px;display:block;"></canvas>
+    <canvas id="profileOverlay" style="width:100%;height:110px;display:block;position:absolute;top:0;left:0;pointer-events:none;"></canvas>
+  </div>
+  <div id="profileLegend" style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text-muted);margin-top:6px;"></div>
+</div>
+
+<div class="card" id="statsCard" style="display:none;">
+  <h2>Runner stats</h2>
+  <div class="stats-grid" id="statsGrid"></div>
+  <div class="legend">
+    <div class="legend-item"><div class="leg-line" style="background:#1D9E75;"></div>GPX course</div>
+    <div class="legend-item"><div class="leg-dot"  style="background:#639922;"></div>Start</div>
+    <div class="legend-item"><div class="leg-dot"  style="background:#E24B4A;"></div>Finish</div>
+    <div class="legend-item"><div class="leg-dot"  style="background:#aaa;border-color:#fff;"></div>Runner position (snapped)</div>
+    <div class="legend-item"><div class="leg-dot"  style="background:#aaa;border-color:#fff;opacity:0.4;"></div>Trail</div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Accordion
+// ─────────────────────────────────────────────────────────────────────────────
+function toggleAccordion(bodyId, header) {
+  const body = document.getElementById(bodyId);
+  const isOpen = body.classList.contains('open');
+  body.classList.toggle('open', !isOpen);
+  header.classList.toggle('open', !isOpen);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Theme Management
+// ─────────────────────────────────────────────────────────────────────────────
+function toggleTheme() {
+  const isDark = document.body.classList.toggle('dark-theme');
+  if (map && baseLayers) {
+    if (isDark) {
+      baseLayers['Dark (CartoDB)'].addTo(map);
+    } else {
+      baseLayers['OpenStreetMap'].addTo(map);
+    }
+  }
+  drawProfile();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Leaderboard
+// ─────────────────────────────────────────────────────────────────────────────
+function fmtMMSS(ms) {
+  if (ms == null || isNaN(ms)) return '—';
+  const totalSec = Math.round(Math.abs(ms) / 1000);
+  const h  = Math.floor(totalSec / 3600);
+  const m  = Math.floor((totalSec % 3600) / 60);
+  const s  = totalSec % 60;
+  const mm = String(m).padStart(2, '0');
+  const ss = String(s).padStart(2, '0');
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+function updateLeaderboard() {
+  const ids    = Object.keys(runners);
+  const lbList = document.getElementById('lbList');
+
+  if (!ids.length) {
+    lbList.innerHTML = '<div class="lb-empty">No runners loaded</div>';
+    lbGapHistory = {};
+    return;
+  }
+
+  const ts = pb.virtualNow;
+  const TREND_WINDOW_MS = 60_000;
+
+  const entries = ids.map(id => {
+    const r        = runners[id];
+    const finished = r.finishedAt != null && ts >= r.finishedAt;
+    const pos      = interpolatePosition(id, finished ? r.finishedAt : ts);
+    const metres   = pos?.courseMetres ?? -1;
+    const startTs  = r.points.length ? r.points[0].timestamp : null;
+    const elapsed  = startTs != null ? (finished ? r.finishTime : Math.max(0, ts - startTs)) : null;
+    return { id, color: r.color, visible: r.visible, finished, finishTime: r.finishTime, metres, elapsed };
+  });
+
+  entries.sort((a, b) => {
+    if (a.finished && b.finished) return a.finishTime - b.finishTime;
+    if (a.finished) return -1;
+    if (b.finished) return  1;
+    return b.metres - a.metres;
+  });
+
+  function computeGapToPrev(entry, prev) {
+    if (!prev) return null;
+    if (entry.finished && prev.finished) return entry.finishTime - prev.finishTime;
+    if (entry.finished && !prev.finished) return null;
+    if (!entry.finished && prev.finished) return prev.finishTime - (entry.elapsed ?? 0);
+    const prevPts = runners[prev.id].points;
+    let paceMs = null;
+    if (prevPts.length >= 2) {
+      const recent = prevPts.filter(p => p.timestamp >= ts - TREND_WINDOW_MS);
+      const ref    = recent.length >= 2 ? recent : prevPts.slice(-2);
+      const dm = (ref.at(-1).courseMetres ?? 0) - (ref[0].courseMetres ?? 0);
+      const dt = ref.at(-1).timestamp - ref[0].timestamp;
+      if (dm > 0) paceMs = dt / dm;
+    }
+    const metresBehind = (prev.metres ?? 0) - (entry.metres ?? 0);
+    if (paceMs != null && metresBehind >= 0) return metresBehind * paceMs;
+    return (entry.elapsed ?? 0) - (prev.elapsed ?? 0);
+  }
+
+  const rankClass  = ['gold', 'silver', 'bronze'];
+  const medalEmoji = ['🥇', '🥈', '🥉'];
+  const newHistory = {};
+
+  lbList.innerHTML = entries.map((r, i) => {
+    const rankLabel = i < 3
+      ? `<span class="lb-rank ${rankClass[i]}">${medalEmoji[i]}</span>`
+      : `<span class="lb-rank">${i + 1}</span>`;
+
+    const gap = i === 0 ? null : computeGapToPrev(r, entries[i - 1]);
+    const hist = (lbGapHistory[r.id] || []).filter(h => h.ts >= ts - TREND_WINDOW_MS);
+    if (gap != null) hist.push({ ts, gap });
+    newHistory[r.id] = hist;
+
+    let arrow = '';
+    if (i > 0 && gap != null && hist.length >= 2) {
+      const oldest = hist[0].gap;
+      const delta  = gap - oldest;
+      if      (delta < -2000) arrow = '<span class="lb-arrow lb-arrow-up">▲</span>';
+      else if (delta >  2000) arrow = '<span class="lb-arrow lb-arrow-down">▼</span>';
+      else                    arrow = '<span class="lb-arrow lb-arrow-flat">—</span>';
+    }
+
+    let mainCol = '';
+    if (i === 0) {
+      const t = r.elapsed != null ? fmtMMSS(r.elapsed) : '—';
+      mainCol = `<span class="lb-gap lb-gap-leader">${r.finished ? '🏁 ' : ''}${t}</span>`;
+    } else if (gap != null) {
+      mainCol = `<span class="lb-gap">+${fmtMMSS(gap)}</span>`;
+    } else {
+      mainCol = `<span class="lb-gap lb-gap-na">—</span>`;
+    }
+
+    const opacity = r.visible ? '1' : '0.35';
+    const info    = rosterInfo(r.id);
+    const display = `${info.flag} ${info.label}`;
+    return `<div class="lb-row${r.finished ? ' lb-row-finished' : ''}" style="opacity:${opacity}">
+      ${rankLabel}
+      <span class="lb-swatch" style="background:${r.color}"></span>
+      <span class="lb-name">${display}</span>
+      ${mainCol}
+      ${arrow}
+    </div>`;
+  }).join('');
+
+  lbGapHistory = newHistory;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────────────────────
+const RUNNER_COLORS = [
+  '#da627d', '#ffa5ab', '#f9dbbd', '#a53860',
+  '#378ADD', '#D85A30', '#7F77DD', '#1D9E75'
+];
+
+const RUNNER_ROSTER = {
+  'RACE-00001': { name: 'Lukas',    surname: 'MÜLLER',    country: 'Germany',  flag: '🇩🇪' },
+  'RACE-00002': { name: 'Sofía',    surname: 'DELGADO',   country: 'Spain',    flag: '🇪🇸' },
+  'RACE-00003': { name: 'Antoine',  surname: 'BERNARD',   country: 'France',   flag: '🇫🇷' },
+  'RACE-00004': { name: 'Giulia',   surname: 'ROMANO',    country: 'Italy',    flag: '🇮🇹' },
+  'RACE-00005': { name: 'Marek',    surname: 'NOVÁK',     country: 'Czechia',  flag: '🇨🇿' },
+};
+const SLIDER_STEPS = 10000;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────────────────────
+let map, courseLayer, baseLayers;
+let coursePoints    = [];
+let courseDistances = [];
+let lbGapHistory = {};
+let runners      = {};
+let runnerLayers = {};
+
+let pb = {
+  playing:    false,
+  speed:      1,
+  virtualNow: 0,
+  windowFrom: null,
+  windowTo:   null,
+  tMin:       null,
+  tMax:       null,
+  rafId:      null,
+  lastRaf:    null
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Map init
+// ─────────────────────────────────────────────────────────────────────────────
+(function() {
+  map = L.map('map').setView([50.85, 4.35], 10);
+  baseLayers = {
+    'OpenStreetMap': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 19
+    }),
+    'Satellite (Esri)': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      attribution: '© Esri, Maxar, Earthstar Geographics', maxZoom: 19
+    }),
+    'Terrain (Stadia)': L.tileLayer('https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.png', {
+      attribution: '© <a href="https://stadiamaps.com/">Stadia Maps</a>, © <a href="https://stamen.com">Stamen Design</a>, © OpenStreetMap contributors', maxZoom: 18
+    }),
+    'Topo (OpenTopoMap)': L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://opentopomap.org">OpenTopoMap</a> contributors', maxZoom: 17
+    }),
+    'Dark (CartoDB)': L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© <a href="https://carto.com/">CARTO</a>, © OpenStreetMap contributors', maxZoom: 19
+    })
+  };
+  baseLayers['OpenStreetMap'].addTo(map);
+  L.control.layers(baseLayers, {}, { position: 'topright', collapsed: true }).addTo(map);
+  courseLayer = L.layerGroup().addTo(map);
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Geometry
+// ─────────────────────────────────────────────────────────────────────────────
+function haversine(a, b) {
+  const R = 6371000;
+  const dLat = (b.lat - a.lat) * Math.PI / 180;
+  const dLon = (b.lon - a.lon) * Math.PI / 180;
+  const s = Math.sin(dLat/2)**2 + Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.asin(Math.sqrt(s));
+}
+
+function snapToCourse(P) {
+  if (!coursePoints.length) return { snappedLat: P.lat, snappedLon: P.lon, courseMetres: null };
+  let bestDist = Infinity, bestLat = P.lat, bestLon = P.lon, bestM = 0;
+  for (let i = 0; i < coursePoints.length - 1; i++) {
+    const A = coursePoints[i], B = coursePoints[i+1];
+    const dx = B.lon - A.lon, dy = B.lat - A.lat;
+    const lenSq = dx*dx + dy*dy;
+    const t = lenSq ? Math.max(0, Math.min(1, ((P.lon-A.lon)*dx + (P.lat-A.lat)*dy) / lenSq)) : 0;
+    const cLat = A.lat + t*dy, cLon = A.lon + t*dx;
+    const d = haversine(P, { lat: cLat, lon: cLon });
+    if (d < bestDist) {
+      bestDist = d; bestLat = cLat; bestLon = cLon;
+      bestM = courseDistances[i] + t * haversine(A, B);
+    }
+  }
+  return { snappedLat: bestLat, snappedLon: bestLon, courseMetres: bestM };
+}
+
+function interpolatePosition(id, ts) {
+  const pts = runners[id].points;
+  if (!pts.length) return null;
+  if (ts <= pts[0].timestamp)     return { lat: pts[0].snappedLat,     lon: pts[0].snappedLon,     courseMetres: pts[0].courseMetres,     timestamp: pts[0].timestamp };
+  if (ts >= pts.at(-1).timestamp) return { lat: pts.at(-1).snappedLat, lon: pts.at(-1).snappedLon, courseMetres: pts.at(-1).courseMetres, timestamp: pts.at(-1).timestamp };
+  let lo = 0, hi = pts.length - 1;
+  while (lo < hi - 1) { const mid = (lo + hi) >> 1; pts[mid].timestamp <= ts ? lo = mid : hi = mid; }
+  const a = pts[lo], b = pts[hi];
+  const frac = (ts - a.timestamp) / (b.timestamp - a.timestamp);
+  return {
+    lat: a.snappedLat + frac * (b.snappedLat - a.snappedLat),
+    lon: a.snappedLon + frac * (b.snappedLon - a.snappedLon),
+    courseMetres: a.courseMetres != null && b.courseMetres != null ? a.courseMetres + frac * (b.courseMetres - a.courseMetres) : null,
+    timestamp: ts
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Format helpers
+// ─────────────────────────────────────────────────────────────────────────────
+function fmtFull(ts) {
+  return new Date(ts).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
+}
+function fmtDur(ms) {
+  const s = Math.round(ms/1000);
+  if (s < 60) return s+'s';
+  const m = Math.floor(s/60), rs = s%60;
+  if (m < 60) return m+'m '+rs+'s';
+  return Math.floor(m/60)+'h '+(m%60)+'m';
+}
+function tsToLocal(ts) {
+  const d = new Date(ts), p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+function colorIcon(color, size=13) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 0 0 1px ${color};"></div>`,
+    iconSize: [size,size], iconAnchor: [size/2,size/2]
+  });
+}
+function rosterInfo(id) {
+  const r = RUNNER_ROSTER[id];
+  if (!r) return { label: id, flag: '', surname: id };
+  return { label: `${r.surname} ${r.name[0]}`, flag: r.flag, surname: r.surname };
+}
+
+(function prefillRoster() {
+  const presetBibs = Object.keys(RUNNER_ROSTER);
+  const hint = document.createElement('div');
+  hint.style.cssText = 'margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;';
+  hint.innerHTML = presetBibs.map(bib => {
+    const info = rosterInfo(bib);
+    return `<button class="btn" style="font-size:12px;padding:4px 10px;" onclick="quickAdd('${bib}')">${info.flag} ${info.label}</button>`;
+  }).join('');
+  document.getElementById('runnerList').before(hint);
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GPX loading — file drop + URL fetch
+// ─────────────────────────────────────────────────────────────────────────────
+function dz(e, type) {
+  e.preventDefault();
+  const el = document.getElementById('dropZone');
+  if (type === 'over')  el.classList.add('over');
+  if (type === 'leave') el.classList.remove('over');
+  if (type === 'drop')  { el.classList.remove('over'); loadGpx(e.dataTransfer.files[0]); }
+}
+function loadGpx(file) {
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = e => parseGpx(e.target.result, file.name);
+  r.readAsText(file);
+}
+
+async function loadGpxUrl(url, name) {
+  const info = document.getElementById('gpxInfo');
+  info.textContent = 'Loading…';
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    parseGpx(text, name);
+  } catch (e) {
+    info.textContent = `Could not load example: ${e.message}`;
+  }
+}
+
+function emojiIcon(emoji, size = 30) {
+  return L.divIcon({
+    html: `<span style="font-size:${size}px; line-height:1;">${emoji}</span>`,
+    className: '', iconAnchor: [size / 2, size / 2], popupAnchor: [0, -(size / 2)]
+  });
+}
+
+function parseGpx(text, name) {
+  const doc    = new DOMParser().parseFromString(text, 'application/xml');
+  const trkpts = [...doc.querySelectorAll('trkpt')];
+  if (!trkpts.length) { document.getElementById('gpxInfo').textContent = 'No track points found.'; return; }
+
+  coursePoints = trkpts.map(pt => ({
+    lat: parseFloat(pt.getAttribute('lat')),
+    lon: parseFloat(pt.getAttribute('lon')),
+    ele: parseFloat(pt.querySelector('ele')?.textContent ?? 'NaN')
+  }));
+  courseDistances = [0];
+  for (let i = 1; i < coursePoints.length; i++)
+    courseDistances.push(courseDistances[i-1] + haversine(coursePoints[i-1], coursePoints[i]));
+
+  const totalKm = (courseDistances.at(-1)/1000).toFixed(2);
+  courseLayer.clearLayers();
+  const ll = coursePoints.map(p => [p.lat, p.lon]);
+  L.polyline(ll, { color:'#ff6f91', weight:10, opacity:0.95 }).addTo(courseLayer);
+  L.marker(ll[0], { icon: emojiIcon('🚥', 32) }).bindPopup('<b>Start</b>').addTo(courseLayer);
+  L.marker(ll.at(-1), { icon: emojiIcon('🏁', 32) }).bindPopup('<b>Finish</b>').addTo(courseLayer);
+  map.fitBounds(L.polyline(ll).getBounds(), { padding:[40,40] });
+
+  document.getElementById('gpxInfo').textContent = `${name} — ${coursePoints.length} pts — ${totalKm} km`;
+  document.getElementById('dropZone').innerHTML =
+    `✓ ${name} &nbsp;<span style="color:var(--text-ultra-muted);font-size:12px;">(${totalKm} km · click to replace)</span>` +
+    `<input type="file" id="gpxFile" accept=".gpx" onchange="loadGpx(this.files[0])" style="display:none;">`;
+
+  Object.keys(runners).forEach(id => snapRunner(id));
+  rebuildWindow();
+  drawProfile();
+}
+
+async function quickAdd(bib) {
+  document.getElementById('runnerId').value = bib;
+  await addRunner();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Runners
+// ─────────────────────────────────────────────────────────────────────────────
+async function addRunner() {
+  const base = document.getElementById('apiBase').value.trim().replace(/\/$/,'');
+  const id   = document.getElementById('runnerId').value.trim().toUpperCase();
+  if (!id) { setRS('Enter a runner ID.','err'); return; }
+  if (runners[id]) { setRS(`${id} already loaded.`,'warn'); return; }
+  setRS(`Fetching ${id}…`);
+  try {
+    const res  = await fetch(`${base}?id=${encodeURIComponent(id)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    const raw  = json.data ?? (Array.isArray(json) ? json : Object.values(json));
+    if (!raw.length) throw new Error('No records returned.');
+
+    const rawPoints = raw.map(r => ({
+      lat:       r.location?.lat ?? r.lat ?? r.latitude,
+      lon:       r.location?.lon ?? r.lon ?? r.longitude ?? r.lng,
+      timestamp: new Date(r.timestamp ?? r.time ?? r.ts).getTime()
+    }))
+    .filter(p => p.lat != null && p.lon != null && !isNaN(p.timestamp))
+    .sort((a,b) => a.timestamp - b.timestamp);
+
+    if (!rawPoints.length) throw new Error('No valid lat/lon/timestamp records.');
+
+    const color = RUNNER_COLORS[Object.keys(runners).length % RUNNER_COLORS.length];
+    const info  = rosterInfo(id);
+    runners[id] = { color, visible: true, rawPoints, points: [], ...info };
+
+    const group = L.layerGroup().addTo(map);
+    runnerLayers[id] = {
+      group,
+      trail: L.polyline([], { color, weight: 2, opacity: 0.5, dashArray: '4 4' }).addTo(group),
+      head:  null
+    };
+
+    snapRunner(id);
+    addChip(id, color);
+    rebuildWindow();
+    updateStats();
+    setRS(`Loaded ${rawPoints.length} points for ${id}.`, 'ok');
+    document.getElementById('runnerId').value = '';
+  } catch(e) { setRS('Error: '+e.message,'err'); }
+}
+
+function snapRunner(id) {
+  const r = runners[id];
+  r.points = r.rawPoints.map(p => ({ ...p, ...snapToCourse(p) }));
+  const finishM = courseDistances.length ? courseDistances.at(-1) : null;
+  r.finishedAt  = null;
+  r.finishTime  = null;
+  if (finishM != null && r.points.length) {
+    const FINISH_THRESHOLD = 30;
+    for (let i = 0; i < r.points.length; i++) {
+      if (r.points[i].courseMetres != null && (finishM - r.points[i].courseMetres) <= FINISH_THRESHOLD) {
+        r.finishedAt = r.points[i].timestamp;
+        r.finishTime = r.points[i].timestamp - r.points[0].timestamp;
+        const fp = r.points[i];
+        for (let j = i + 1; j < r.points.length; j++) {
+          r.points[j].snappedLat   = fp.snappedLat;
+          r.points[j].snappedLon   = fp.snappedLon;
+          r.points[j].courseMetres = finishM;
+        }
+        break;
+      }
+    }
+  }
+}
+
+function addChip(id, color) {
+  const list = document.getElementById('runnerList');
+  const el   = document.createElement('div');
+  const info = rosterInfo(id);
+  el.className = 'runner-chip';
+  el.id = `chip-${id}`;
+  el.innerHTML = `<span class="swatch" style="background:${color}"></span><span>${info.flag} ${info.label}</span><span class="rm" title="Remove" onclick="removeRunner('${id}',event)">×</span>`;
+  el.addEventListener('click', () => toggleRunner(id));
+  list.appendChild(el);
+}
+
+function toggleRunner(id) {
+  if (!runners[id]) return;
+  runners[id].visible = !runners[id].visible;
+  document.getElementById(`chip-${id}`)?.classList.toggle('hidden', !runners[id].visible);
+  runners[id].visible ? runnerLayers[id].group.addTo(map) : runnerLayers[id].group.remove();
+  updateLeaderboard();
+}
+
+function removeRunner(id, e) {
+  e.stopPropagation();
+  if (runnerLayers[id]) { runnerLayers[id].group.remove(); delete runnerLayers[id]; }
+  delete runners[id];
+  delete lbGapHistory[id];
+  document.getElementById(`chip-${id}`)?.remove();
+  rebuildWindow();
+  updateStats();
+  updateLeaderboard();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Window
+// ─────────────────────────────────────────────────────────────────────────────
+function rebuildWindow() {
+  const all = Object.values(runners).flatMap(r => r.points.map(p => p.timestamp));
+  if (!all.length) {
+    pb.tMin = pb.tMax = null;
+    document.getElementById('btnPlay').disabled = true;
+    document.getElementById('pbTimeLabel').textContent = '—';
+    return;
+  }
+  const dataMin = Math.min(...all);
+  const dataMax = Math.max(...all);
+  pb.tMin = pb.windowFrom ?? dataMin;
+  pb.tMax = pb.windowTo   ?? dataMax;
+  pb.virtualNow = pb.tMin;
+  if (!document.getElementById('pbFrom').value) document.getElementById('pbFrom').value = tsToLocal(dataMin);
+  if (!document.getElementById('pbTo').value)   document.getElementById('pbTo').value   = tsToLocal(dataMax);
+  document.getElementById('btnPlay').disabled = false;
+  updateSlider();
+  renderFrame();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Render
+// ─────────────────────────────────────────────────────────────────────────────
+function renderFrame() {
+  const ts = pb.virtualNow;
+  document.getElementById('pbTimeLabel').textContent = pb.tMin != null ? fmtFull(ts) : '—';
+  Object.keys(runners).forEach(id => {
+    const r  = runners[id];
+    const rl = runnerLayers[id];
+    if (!r || !rl) return;
+    const trailPts = r.points.filter(p => p.timestamp <= ts).map(p => [p.snappedLat, p.snappedLon]);
+    rl.trail.setLatLngs(trailPts);
+    if (rl.head) { rl.head.remove(); rl.head = null; }
+    const finished = r.finishedAt != null && ts >= r.finishedAt;
+    const pos = finished ? interpolatePosition(id, r.finishedAt) : interpolatePosition(id, ts);
+    if (pos) {
+      const mapLabel = finished ? `🏁 ${r.surname}` : r.surname;
+      rl.head = L.circleMarker([pos.lat, pos.lon], {
+        radius: finished ? 9 : 8, color: '#ffffff', fillColor: r.color, fillOpacity: 1, weight: 2
+      }).bindTooltip(mapLabel, {
+        permanent: true, direction: 'top', offset: [0, -10], className: 'marker-tip', opacity: 0.95
+      }).addTo(rl.group);
+    }
+  });
+  updateStats();
+  updateLeaderboard();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Playback
+// ─────────────────────────────────────────────────────────────────────────────
+function togglePlay() { pb.playing ? pausePlayback() : startPlayback(); }
+
+function startPlayback() {
+  if (pb.tMin == null) return;
+  if (pb.virtualNow >= pb.tMax) pb.virtualNow = pb.tMin;
+  pb.playing = true; pb.lastRaf = null;
+  document.getElementById('btnPlay').style.display  = 'none';
+  document.getElementById('btnPause').style.display = '';
+  pb.rafId = requestAnimationFrame(rafLoop);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Altimetry profile
+// ─────────────────────────────────────────────────────────────────────────────
+const PAD = { top: 18, right: 16, bottom: 28, left: 44 };
+
+function drawProfile() {
+  const card   = document.getElementById('profileCard');
+  const canvas = document.getElementById('profileCanvas');
+  const overlay= document.getElementById('profileOverlay');
+  const hasEle = coursePoints.some(p => !isNaN(p.ele));
+  card.style.display = coursePoints.length ? '' : 'none';
+  if (!coursePoints.length) return;
+
+  const W = canvas.offsetWidth  || 800;
+  const H = canvas.offsetHeight || 110;
+  canvas.width  = W; canvas.height  = H;
+  overlay.width = W; overlay.height = H;
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+  const totalM = courseDistances.at(-1) || 1;
+
+  if (!hasEle) {
+    ctx.strokeStyle = '#1D9E75'; ctx.lineWidth = 2; ctx.beginPath();
+    ctx.moveTo(PAD.left, H/2); ctx.lineTo(W - PAD.right, H/2); ctx.stroke();
+    drawProfileOverlay(); return;
+  }
+
+  const eles   = coursePoints.map(p => p.ele).filter(e => !isNaN(e));
+  const eMin   = Math.min(...eles), eMax = Math.max(...eles);
+  const eRange = eMax - eMin || 1;
+  const plotW  = W - PAD.left - PAD.right;
+  const plotH  = H - PAD.top  - PAD.bottom;
+
+  function xOf(i) { return PAD.left + (courseDistances[i] / totalM) * plotW; }
+  function yOf(e) { return PAD.top  + plotH - ((e - eMin) / eRange) * plotH; }
+
+  const isDarkTheme = document.body.classList.contains('dark-theme');
+
+  const grad = ctx.createLinearGradient(0, PAD.top, 0, PAD.top + plotH);
+  if (isDarkTheme) {
+    grad.addColorStop(0, 'rgba(218, 98, 125, 0.45)');  /* Blush Rose shadow */
+    grad.addColorStop(1, 'rgba(69, 9, 32, 0.05)');     /* Crimson Violet base */
+  } else {
+    grad.addColorStop(0, 'rgba(29,158,117,0.35)');
+    grad.addColorStop(1, 'rgba(29,158,117,0.04)');
+  }
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(xOf(0), PAD.top + plotH);
+  coursePoints.forEach((p, i) => { if (!isNaN(p.ele)) ctx.lineTo(xOf(i), yOf(p.ele)); });
+  ctx.lineTo(xOf(coursePoints.length-1), PAD.top + plotH);
+  ctx.closePath(); ctx.fill();
+
+  ctx.strokeStyle = isDarkTheme ? '#ffa5ab' : '#1D9E75'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.beginPath();
+  let first = true;
+  coursePoints.forEach((p, i) => {
+    if (isNaN(p.ele)) return;
+    first ? ctx.moveTo(xOf(i), yOf(p.ele)) : ctx.lineTo(xOf(i), yOf(p.ele));
+    first = false;
+  });
+  ctx.stroke();
+
+  ctx.fillStyle = isDarkTheme ? '#da627d' : '#aaa'; ctx.font = '11px system-ui'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let s = 0; s <= 4; s++) {
+    const e = eMin + (s / 4) * eRange, y = yOf(e);
+    ctx.fillText(Math.round(e)+'m', PAD.left - 4, y);
+    ctx.strokeStyle = isDarkTheme ? 'rgba(255,165,171,0.08)' : 'rgba(0,0,0,0.06)'; ctx.lineWidth = 1; ctx.beginPath();
+    ctx.moveTo(PAD.left, y); ctx.lineTo(W - PAD.right, y); ctx.stroke();
+  }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = isDarkTheme ? '#da627d' : '#aaa';
+  const kmSteps = Math.min(8, Math.floor(totalM / 1000));
+  for (let k = 0; k <= kmSteps; k++) {
+    const m = (k / kmSteps) * totalM;
+    ctx.fillText((m/1000).toFixed(1)+'k', PAD.left + (m/totalM)*plotW, H - PAD.bottom + 4);
+  }
+  drawProfileOverlay();
+}
+
+function pausePlayback() {
+  pb.playing = false;
+  if (pb.rafId) { cancelAnimationFrame(pb.rafId); pb.rafId = null; }
+  document.getElementById('btnPlay').style.display  = '';
+  document.getElementById('btnPause').style.display = 'none';
+}
+
+function rafLoop(now) {
+  if (!pb.playing) return;
+  if (pb.lastRaf == null) pb.lastRaf = now;
+  pb.virtualNow += (now - pb.lastRaf) * pb.speed;
+  pb.lastRaf = now;
+  if (pb.virtualNow >= pb.tMax) {
+    pb.virtualNow = pb.tMax; renderFrame(); updateSlider(); pausePlayback(); return;
+  }
+  renderFrame(); updateSlider();
+  pb.rafId = requestAnimationFrame(rafLoop);
+}
+
+function rewind() {
+  pausePlayback();
+  pb.virtualNow = pb.tMin ?? 0;
+  renderFrame(); updateSlider();
+}
+
+function setSpeed(s) {
+  pb.speed = s;
+  [1,2,5,10].forEach(v => document.getElementById(`sp${v}`)?.classList.toggle('active', v === s));
+}
+
+function onScrub() {
+  pausePlayback();
+  if (pb.tMin == null) return;
+  pb.virtualNow = pb.tMin + (parseInt(document.getElementById('pbSlider').value) / SLIDER_STEPS) * (pb.tMax - pb.tMin);
+  renderFrame();
+}
+
+function updateSlider() {
+  if (pb.tMin == null || pb.tMax === pb.tMin) return;
+  document.getElementById('pbSlider').value = Math.round(((pb.virtualNow - pb.tMin) / (pb.tMax - pb.tMin)) * SLIDER_STEPS);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Time window controls
+// ─────────────────────────────────────────────────────────────────────────────
+function applyWindow() {
+  const f = document.getElementById('pbFrom').value;
+  const t = document.getElementById('pbTo').value;
+  pb.windowFrom = f ? new Date(f).getTime() : null;
+  pb.windowTo   = t ? new Date(t).getTime() : null;
+  pausePlayback(); rebuildWindow();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stats
+// ─────────────────────────────────────────────────────────────────────────────
+function updateStats() {
+  const ids = Object.keys(runners);
+  document.getElementById('statsCard').style.display = ids.length ? '' : 'none';
+  if (!ids.length) return;
+  document.getElementById('statsGrid').innerHTML = ids.map(id => {
+    const r   = runners[id];
+    const pos = interpolatePosition(id, pb.virtualNow);
+    const pts = r.points;
+    if (!pts.length) return `<div class="stat" style="border-left-color:${r.color}"><div class="stat-label">${id}</div><div class="stat-val" style="font-size:13px;">No data</div></div>`;
+    const elapsed = pb.virtualNow - pts[0].timestamp;
+    const km = pos?.courseMetres != null ? (pos.courseMetres/1000).toFixed(2)+' km' : '—';
+    return `<div class="stat" style="border-left-color:${r.color}">
+      <div class="stat-label">${id}</div>
+      <div class="stat-val">${km}</div>
+      <div class="stat-sub">${pts.length} pts total</div>
+      <div class="stat-sub">Elapsed: ${elapsed > 0 ? fmtDur(elapsed) : '—'}</div>
+      <div class="stat-sub">Data: ${fmtFull(pts[0].timestamp)}</div>
+    </div>`;
+  }).join('');
+}
+
+function setRS(msg, type) {
+  const el = document.getElementById('runnerStatus');
+  el.textContent = msg;
+  el.className   = 'status' + (type ? ' '+type : '');
+}
+
+function resetWindow() {
+  pb.windowFrom = null; pb.windowTo = null;
+  document.getElementById('pbFrom').value = '';
+  document.getElementById('pbTo').value   = '';
+  pausePlayback(); rebuildWindow();
+}
+
+function drawProfileOverlay() {
+  const canvas = document.getElementById('profileCanvas');
+  const overlay= document.getElementById('profileOverlay');
+  if (!overlay) return;
+  const W = overlay.width || canvas.offsetWidth || 800;
+  const H = overlay.height|| canvas.offsetHeight|| 110;
+  overlay.width = W; overlay.height = H;
+  const ctx = overlay.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+  if (!coursePoints.length) return;
+
+  const totalM = courseDistances.at(-1) || 1;
+  const plotW  = W - PAD.left - PAD.right;
+  const plotH  = H - PAD.top  - PAD.bottom;
+  const hasEle = coursePoints.some(p => !isNaN(p.ele));
+  const eles   = hasEle ? coursePoints.map(p => p.ele).filter(e => !isNaN(e)) : [];
+  const eMin   = eles.length ? Math.min(...eles) : 0;
+  const eRange = eles.length ? (Math.max(...eles) - eMin) || 1 : 1;
+
+  Object.keys(runners).forEach(id => {
+    const r   = runners[id];
+    if (!r.visible) return;
+    const pos = interpolatePosition(id, pb.virtualNow);
+    if (!pos || pos.courseMetres == null) return;
+    const x = PAD.left + (pos.courseMetres / totalM) * plotW;
+
+    let posEle = null;
+    if (hasEle) {
+      let lo = 0;
+      for (let i = 0; i < courseDistances.length - 1; i++) {
+        if (courseDistances[i] <= pos.courseMetres && courseDistances[i+1] >= pos.courseMetres) { lo = i; break; }
+      }
+      const frac = (pos.courseMetres - courseDistances[lo]) / (courseDistances[lo+1] - courseDistances[lo] || 1);
+      const eA = coursePoints[lo]?.ele, eB = coursePoints[lo+1]?.ele;
+      if (!isNaN(eA) && !isNaN(eB)) posEle = eA + frac * (eB - eA);
+    }
+
+    const y = posEle != null ? PAD.top + plotH - ((posEle - eMin) / eRange) * plotH : H / 2;
+    ctx.strokeStyle = r.color + 'aa'; ctx.lineWidth = 1.5; ctx.setLineDash([3,3]);
+    ctx.beginPath(); ctx.moveTo(x, PAD.top); ctx.lineTo(x, PAD.top + plotH); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = r.color; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = r.color; ctx.font = '10px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText(posEle != null ? `${r.surname} ${Math.round(posEle)}m` : r.surname, x, y - 7);
+  });
+
+  const lg = document.getElementById('profileLegend');
+  if (lg) {
+    lg.innerHTML = Object.keys(runners).map(id => {
+      const r   = runners[id];
+      const pos = interpolatePosition(id, pb.virtualNow);
+      const km  = pos?.courseMetres != null ? (pos.courseMetres/1000).toFixed(2)+' km' : '—';
+      return `<span style="display:flex;align-items:center;gap:5px;">
+        <span style="width:10px;height:10px;border-radius:50%;background:${r.color};flex-shrink:0;"></span>
+        <span>${r.flag} ${r.surname} · ${km}</span></span>`;
+    }).join('');
+  }
+}
+
+const _origRender = renderFrame;
+renderFrame = function() { _origRender(); drawProfileOverlay(); };
+</script>
+</body>
+</html>
