@@ -350,6 +350,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
+  
 // ─────────────────────────────────────────────────────────────────────────────
 // Accordion
 // ─────────────────────────────────────────────────────────────────────────────
@@ -489,16 +490,25 @@ function updateLeaderboard() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
+
 const RUNNER_COLORS = [
-  '#da627d', '#ffa5ab', '#f9dbbd', '#a53860',
-  '#378ADD', '#D85A30', '#7F77DD', '#1D9E75'
+  '#99cc33', // Yellow Green
+  '#ffcc00', // Bright Amber
+  '#ccee66',  // Lime Cream
+  '#006699', // Baltic Blue
+  '#ff6600', // Blaze Orange
+  '#ff9900', // Amber Glow
+  '#990066', // Dark Raspberry
+  '#669900', // Forest Moss
+  '#3399cc', // Blue Bell
+  '#cc3399' // Raspberry Plum
 ];
 
 const RUNNER_ROSTER = {
   'RACE-00001': { name: 'Lukas',    surname: 'MÜLLER',    country: 'Germany',  flag: '🇩🇪' },
   'RACE-00002': { name: 'Sofía',    surname: 'DELGADO',   country: 'Spain',    flag: '🇪🇸' },
   'RACE-00003': { name: 'Antoine',  surname: 'BERNARD',   country: 'France',   flag: '🇫🇷' },
-  'RACE-00004': { name: 'Giulia',   surname: 'ROMANO',    country: 'Italy',    flag: '🇮🇹' },
+  'RACE-00004': { name: 'Giulia',   surname: 'SMITH',    country: 'Italy',    flag: '🇮🇹' },
   'RACE-00005': { name: 'Marek',    surname: 'NOVÁK',     country: 'Czechia',  flag: '🇨🇿' },
 };
 const SLIDER_STEPS = 10000;
