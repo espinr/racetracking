@@ -213,8 +213,8 @@ const GPX_NAME   = 'Speed Trail';
 const FIRST_BIB  = 1;
 const LAST_BIB   = 20;
 const POLL_MS    = 10_000;   // how often the API is queried
-const LIVE_MS    = 10_000;   // position newer than this  -> live (green)
-const STALE_MS   = 60_000;   // position newer than this  -> delayed (orange), older -> offline (black)
+const LIVE_MS    = 30_000;   // position newer than this  -> live (green)
+const STALE_MS   = 90_000;   // position newer than this  -> delayed (orange), older -> offline (black)
 const FINISH_THRESHOLD_M = 30;
 
 const IDS = Array.from({ length: LAST_BIB - FIRST_BIB + 1 }, (_, i) => String(FIRST_BIB + i).padStart(6, '0'));
