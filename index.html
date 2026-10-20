@@ -144,14 +144,35 @@
 
     /* Map + leaderboard side by side */
     .map-row { display: flex; gap: 12px; margin-bottom: 1rem; align-items: flex-start; }
-    #map { flex: 1; height: 480px; border-radius: 12px; border: 0.5px solid var(--border-card); overflow: hidden; margin-bottom: 0; min-width: 0; }
+    :root { --map-h: clamp(480px, 65vh, 900px); }
+    #map { flex: 1; height: var(--map-h); border-radius: 12px; border: 0.5px solid var(--border-card); overflow: hidden; margin-bottom: 0; min-width: 0; }
 
     /* Leaderboard */
     .leaderboard-panel {
       width: 280px; flex-shrink: 0;
       background: var(--bg-card); border: 0.5px solid var(--border-card); border-radius: 12px;
-      padding: 0.75rem 1rem; height: 480px; display: flex; flex-direction: column;
+      padding: 0.75rem 1rem; height: var(--map-h); display: flex; flex-direction: column;
     }
+    @media (min-width: 1600px) { .leaderboard-panel { width: 340px; } }
+    @media (max-width: 800px) {
+      .map-row { flex-direction: column; }
+      .leaderboard-panel { width: 100%; height: 260px; }
+    }
+
+    /* Map resize controls */
+    .map-tools { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: -0.5rem 0 1rem; }
+    .size-btns { display: flex; gap: 4px; align-items: center; font-size: 12px; color: var(--text-muted); }
+    .resize-handle {
+      flex: 1; min-width: 80px; height: 14px; cursor: ns-resize; touch-action: none;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .resize-handle::before { content: ''; width: 60px; height: 4px; border-radius: 2px; background: var(--border-input); }
+    .resize-handle:hover::before { background: var(--input-focus-border); }
+    :root { --profile-h: 200px; }
+    body.map-full .map-row { position: fixed; top: 0; left: 0; right: 0; bottom: var(--profile-h); z-index: 2000; margin: 0; padding: 0.5rem 0.5rem 0; background: var(--bg-body); }
+    body.map-full #map, body.map-full .leaderboard-panel { height: calc(100vh - var(--profile-h) - 0.5rem); }
+    /* Elevation profile stays docked at the bottom of the screen in fullscreen */
+    body.map-full #profileCard { position: fixed; left: 0; right: 0; bottom: 0; height: var(--profile-h); z-index: 2001; margin: 0; border-radius: 0; overflow: hidden; }
     .leaderboard-panel h2 { font-size: 11px; font-weight: 500; color: var(--text-ultra-muted); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0; }
     .lb-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
     .lb-row {
@@ -327,6 +348,18 @@
   </div>
 </div>
 
+<div class="map-tools">
+  <div class="size-btns">
+    Map size:
+    <button class="speed-btn" onclick="setMapHeight(400)">S</button>
+    <button class="speed-btn" onclick="setMapHeight(600)">M</button>
+    <button class="speed-btn" onclick="setMapHeight(800)">L</button>
+    <button class="speed-btn" onclick="setMapHeight(Math.round(window.innerHeight*0.85))">XL</button>
+    <button class="speed-btn" onclick="toggleMapFull()" title="Fullscreen map (Esc to exit)">⛶</button>
+  </div>
+  <div class="resize-handle" id="resizeHandle" title="Drag to resize map"></div>
+</div>
+
 <div class="card" id="profileCard" style="display:none;">
   <h2>Elevation profile</h2>
   <div style="position:relative;">
@@ -375,6 +408,41 @@ function toggleTheme() {
   }
   drawProfile();
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Map resizing
+// ─────────────────────────────────────────────────────────────────────────────
+function setMapHeight(px, save = true) {
+  px = Math.max(250, Math.min(px, 2000));
+  document.documentElement.style.setProperty('--map-h', px + 'px');
+  if (save) { try { localStorage.setItem('mapHeight', px); } catch (e) {} }
+  if (map) map.invalidateSize();
+}
+function toggleMapFull(force) {
+  const on = force ?? !document.body.classList.contains('map-full');
+  document.body.classList.toggle('map-full', on);
+  setTimeout(() => { if (map) map.invalidateSize(); drawProfile(); }, 50);
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') toggleMapFull(false); });
+window.addEventListener('resize', () => map && map.invalidateSize());
+
+(function initMapResize() {
+  try {
+    const saved = parseInt(localStorage.getItem('mapHeight'));
+    if (saved) setMapHeight(saved, false);
+  } catch (e) {}
+  const handle = document.getElementById('resizeHandle');
+  let startY = 0, startH = 0;
+  handle.addEventListener('pointerdown', e => {
+    startY = e.clientY;
+    startH = document.getElementById('map').offsetHeight;
+    handle.setPointerCapture(e.pointerId);
+    const move = ev => setMapHeight(startH + (ev.clientY - startY));
+    const up = () => { handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', up); };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+  });
+})();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Leaderboard
@@ -501,15 +569,32 @@ const RUNNER_COLORS = [
   '#990066', // Dark Raspberry
   '#669900', // Forest Moss
   '#3399cc', // Blue Bell
-  '#cc3399' // Raspberry Plum
+  '#cc3399', // Raspberry Plum
+  '#33cc99', // Seafoam Green
+  '#9933cc', // Amethyst Purple
+  '#cc6600', // Rust Orange
+  '#009966', // Emerald Teal
+  '#cc0066', // Deep Cerise
+  '#3366cc', // Royal Azure
+  '#ff3366', // Coral Rose
+  '#663399', // Rebecca Purple
+  '#00cc99', // Mint Turquoise
+  '#cc9900'  // Mustard Gold
 ];
 
 const RUNNER_ROSTER = {
-  'RACE-00001': { name: 'Lukas',    surname: 'MÜLLER',    country: 'Germany',  flag: '🇩🇪' },
-  'RACE-00002': { name: 'Sofía',    surname: 'DELGADO',   country: 'Spain',    flag: '🇪🇸' },
-  'RACE-00003': { name: 'Antoine',  surname: 'BERNARD',   country: 'France',   flag: '🇫🇷' },
-  'RACE-00004': { name: 'Giulia',   surname: 'SMITH',    country: 'Italy',    flag: '🇮🇹' },
-  'RACE-00005': { name: 'Marek',    surname: 'NOVÁK',     country: 'Czechia',  flag: '🇨🇿' },
+  '000001': { name: 'Athlete',    surname: '01',    country: 'Spain',    flag: '🇪🇸' },
+  '000002': { name: 'Athlete',    surname: '01',    country: 'Spain',    flag: '🇪🇸' },
+  '000003': { name: 'Athlete',    surname: '03',      country: 'Spain',    flag: '🇪🇸' },
+  '000004': { name: 'Athlete',    surname: '04',     country: 'Spain',    flag: '🇪🇸' },
+  '000005': { name: 'Athlete',    surname: '05',    country: 'Spain',    flag: '🇪🇸' },
+  '000006': { name: 'Athlete',    surname: '06',    country: 'Spain',    flag: '🇪🇸' },
+  '000007': { name: 'Athlete',    surname: '07',    country: 'Spain',    flag: '🇪🇸' },
+  '000008': { name: 'Athlete',    surname: '08',    country: 'Spain',    flag: '🇪🇸' },
+  '000009': { name: 'Athlete',    surname: '09',    country: 'Spain',    flag: '🇪🇸' },
+  '000010': { name: 'Athlete',    surname: '10',    country: 'Spain',    flag: '🇪🇸' },
+  '000011': { name: 'Athlete',    surname: '11',    country: 'Spain',    flag: '🇪🇸' },
+  '000012': { name: 'Athlete',    surname: '12',    country: 'Spain',    flag: '🇪🇸' },
 };
 const SLIDER_STEPS = 10000;
 
