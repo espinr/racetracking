@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Race Tracking - Live</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <style>
+    /* CSS Variables for Themes */
+    :root {
+      --bg-body: #f5f5f3;
+      --text-body: #1a1a1a;
+      --bg-card: #fff;
+      --border-card: rgba(0,0,0,0.12);
+      --text-muted: #666;
+      --text-ultra-muted: #999;
+      --border-input: rgba(0,0,0,0.2);
+      --input-focus-border: #378ADD;
+
+      --btn-bg: transparent;
+      --btn-color: #1a1a1a;
+      --btn-border: rgba(0,0,0,0.2);
+      --btn-hover: #f5f5f3;
+
+      --btn-primary-bg: #e6f1fb;
+      --btn-primary-color: #185fa5;
+      --btn-primary-border: #b5d4f4;
+      --btn-primary-hover: #b5d4f4;
+
+      --bg-stat-panel: #f5f5f3;
+
+      --st-live: #27ae60;
+      --st-stale: #f39c12;
+      --st-dead: #000000;
+
+      --map-h: clamp(480px, 65vh, 900px);
+      --profile-h: 200px;
+    }
+
+    body.dark-theme {
+      --bg-body: #450920;
+      --text-body: #f9dbbd;
+      --bg-card: #55122d;
+      --border-card: rgba(249, 219, 189, 0.15);
+      --text-muted: #ffa5ab;
+      --text-ultra-muted: #da627d;
+      --border-input: rgba(218, 98, 125, 0.4);
+      --input-focus-border: #ffa5ab;
+
+      --btn-color: #f9dbbd;
+      --btn-border: rgba(218, 98, 125, 0.4);
+      --btn-hover: #a53860;
+
+      --btn-primary-bg: #a53860;
+      --btn-primary-color: #f9dbbd;
+      --btn-primary-border: #da627d;
+      --btn-primary-hover: #da627d;
+
+      --bg-stat-panel: #450920;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: var(--bg-body); color: var(--text-body); padding: 1rem; transition: background 0.3s, color 0.3s; }
+
+    .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    .site-header { display: flex; align-items: center; gap: 0.75rem; padding: 1rem 1.5rem; background-color: var(--bg-card); border-bottom: 1px solid var(--border-card); }
+    .header-logo { height: 2rem; width: auto; object-fit: contain; }
+    .header-title { margin: 0; font-size: 1.75rem; font-weight: 700; color: var(--text-body); }
+
+    .card { background: var(--bg-card); border: 0.5px solid var(--border-card); border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1rem; transition: background 0.3s, border-color 0.3s; }
+    .card h2 { font-size: 11px; font-weight: 500; color: var(--text-ultra-muted); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    .btn { padding: 7px 14px; border: 0.5px solid var(--btn-border); border-radius: 8px; background: var(--btn-bg); color: var(--btn-color); cursor: pointer; font-size: 13px; white-space: nowrap; }
+    .btn:hover { background: var(--btn-hover); }
+    .btn-primary { background: var(--btn-primary-bg); color: var(--btn-primary-color); border-color: var(--btn-primary-border); }
+    .btn-primary:hover { background: var(--btn-primary-hover); }
+    .speed-btn { padding: 5px 10px; font-size: 12px; border: 0.5px solid var(--btn-border); border-radius: 6px; background: transparent; color: var(--btn-color); cursor: pointer; }
+    .speed-btn:hover { background: var(--btn-hover); }
+
+    /* Live summary bar */
+    .summary { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; font-size: 13px; }
+    .sum-item { display: flex; align-items: center; gap: 6px; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px #aaa; flex-shrink: 0; }
+    .dot.live  { background: var(--st-live); }
+    .dot.stale { background: var(--st-stale); }
+    .dot.dead  { background: var(--st-dead); }
+    .dot.none  { background: transparent; box-shadow: 0 0 0 1px var(--text-ultra-muted); }
+    .sum-msg { margin-left: auto; color: var(--text-muted); }
+    .sum-msg.err { color: #a32d2d; }
+    body.dark-theme .sum-msg.err { color: #ffa5ab; }
+
+    /* Map + leaderboard side by side */
+    .map-row { display: flex; gap: 12px; margin-bottom: 1rem; align-items: flex-start; }
+    #map { flex: 1; height: var(--map-h); border-radius: 12px; border: 0.5px solid var(--border-card); overflow: hidden; min-width: 0; }
+
+    /* Map markers */
+    .mk {
+      width: 26px; height: 26px; border-radius: 50%; border: 2px solid #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.55); color: #fff; font-size: 10px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums;
+    }
+    .mk-live  { background: var(--st-live); animation: pulse 2s infinite; }
+    .mk-stale { background: var(--st-stale); }
+    .mk-dead  { background: var(--st-dead); }
+    @keyframes pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(39,174,96,0.7), 0 1px 4px rgba(0,0,0,0.55); }
+      70%  { box-shadow: 0 0 0 10px rgba(39,174,96,0), 0 1px 4px rgba(0,0,0,0.55); }
+      100% { box-shadow: 0 0 0 0 rgba(39,174,96,0), 0 1px 4px rgba(0,0,0,0.55); }
+    }
+
+    /* Leaderboard */
+    .leaderboard-panel {
+      width: 300px; flex-shrink: 0;
+      background: var(--bg-card); border: 0.5px solid var(--border-card); border-radius: 12px;
+      padding: 0.75rem 1rem; height: var(--map-h); display: flex; flex-direction: column;
+    }
+    .leaderboard-panel h2 { font-size: 11px; font-weight: 500; color: var(--text-ultra-muted); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0; }
+    .lb-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+    .lb-row {
+      display: grid; grid-template-columns: 24px 12px 1fr auto auto; align-items: center; gap: 6px;
+      padding: 5px 7px; border-radius: 8px; background: var(--bg-stat-panel);
+      border: 0.5px solid var(--border-card); cursor: pointer;
+    }
+    .lb-row:hover { border-color: var(--input-focus-border); }
+    .lb-rank { font-size: 13px; font-weight: 600; color: var(--text-ultra-muted); text-align: center; }
+    .lb-name { font-size: 12px; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .lb-km  { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .lb-age { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; }
+    .lb-row-finished { background: #f0f7e8; }
+    body.dark-theme .lb-row-finished { background: #a53860; }
+    .lb-empty { font-size: 13px; color: var(--text-ultra-muted); text-align: center; margin-top: 1rem; }
+
+    /* Map resize controls */
+    .map-tools { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: -0.5rem 0 1rem; }
+    .size-btns { display: flex; gap: 4px; align-items: center; font-size: 12px; color: var(--text-muted); }
+    .resize-handle { flex: 1; min-width: 80px; height: 14px; cursor: ns-resize; touch-action: none; display: flex; align-items: center; justify-content: center; }
+    .resize-handle::before { content: ''; width: 60px; height: 4px; border-radius: 2px; background: var(--border-input); }
+    .resize-handle:hover::before { background: var(--input-focus-border); }
+
+    @media (min-width: 1600px) { .leaderboard-panel { width: 340px; } }
+    @media (max-width: 800px) {
+      .map-row { flex-direction: column; }
+      .leaderboard-panel { width: 100%; height: 260px; }
+    }
+
+    /* Fullscreen map, elevation profile docked at the bottom */
+    body.map-full .map-row { position: fixed; top: 0; left: 0; right: 0; bottom: var(--profile-h); z-index: 2000; margin: 0; padding: 0.5rem 0.5rem 0; background: var(--bg-body); }
+    body.map-full #map, body.map-full .leaderboard-panel { height: calc(100vh - var(--profile-h) - 0.5rem); }
+    body.map-full #profileCard { position: fixed; left: 0; right: 0; bottom: 0; height: var(--profile-h); z-index: 2001; margin: 0; border-radius: 0; overflow: hidden; }
+
+    .leaflet-control-layers { border-radius: 8px !important; border: 0.5px solid rgba(0,0,0,0.15) !important; box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important; }
+  </style>
+</head>
+<body>
+
+<div class="header-container">
+  <header class="site-header">
+    <img src="./images/logoracetracking.png" alt="Race Tracking Logo" class="header-logo">
+    <h1 class="header-title">Race Tracking</h1>
+  </header>
+  <button class="btn btn-primary" onclick="toggleTheme()" title="Toggle theme">🌓</button>
+</div>
+
+<div class="card">
+  <div class="summary">
+    <div class="sum-item"><span class="dot live"></span>Live (≤10 s): <b id="cntLive">0</b></div>
+    <div class="sum-item"><span class="dot stale"></span>Delayed (&gt;10 s): <b id="cntStale">0</b></div>
+    <div class="sum-item"><span class="dot dead"></span>Offline (&gt;1 min): <b id="cntDead">0</b></div>
+    <div class="sum-item"><span class="dot none"></span>No data: <b id="cntNone">0</b></div>
+    <div class="sum-msg" id="sumMsg">Loading…</div>
+  </div>
+</div>
+
+<div class="map-row">
+  <div id="map"></div>
+  <div class="leaderboard-panel">
+    <h2>🏆 Live classification</h2>
+    <div class="lb-list" id="lbList">
+      <div class="lb-empty">Waiting for data…</div>
+    </div>
+  </div>
+</div>
+
+<div class="map-tools">
+  <div class="size-btns">
+    Map size:
+    <button class="speed-btn" onclick="setMapHeight(400)">S</button>
+    <button class="speed-btn" onclick="setMapHeight(600)">M</button>
+    <button class="speed-btn" onclick="setMapHeight(800)">L</button>
+    <button class="speed-btn" onclick="setMapHeight(Math.round(window.innerHeight*0.85))">XL</button>
+    <button class="speed-btn" onclick="toggleMapFull()" title="Fullscreen map (Esc to exit)">⛶</button>
+    <button class="speed-btn" onclick="fitCourse()" title="Zoom to the whole course">⌖ Course</button>
+  </div>
+  <div class="resize-handle" id="resizeHandle" title="Drag to resize map"></div>
+</div>
+
+<div class="card" id="profileCard" style="display:none;">
+  <h2>Elevation profile</h2>
+  <div style="position:relative;">
+    <canvas id="profileCanvas" style="width:100%;height:110px;display:block;"></canvas>
+    <canvas id="profileOverlay" style="width:100%;height:110px;display:block;position:absolute;top:0;left:0;pointer-events:none;"></canvas>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Configuration
+// ─────────────────────────────────────────────────────────────────────────────
+const API_BASE   = 'https://rt-tracking.netlify.app/api/location-get';
+const GPX_URL    = './gpx/sst-sobrescobio-speed-trail.gpx';
+const GPX_NAME   = 'Speed Trail';
+const FIRST_BIB  = 1;
+const LAST_BIB   = 20;
+const POLL_MS    = 10_000;   // how often the API is queried
+const LIVE_MS    = 10_000;   // position newer than this  -> live (green)
+const STALE_MS   = 60_000;   // position newer than this  -> delayed (orange), older -> offline (black)
+const FINISH_THRESHOLD_M = 30;
+
+const IDS = Array.from({ length: LAST_BIB - FIRST_BIB + 1 }, (_, i) => String(FIRST_BIB + i).padStart(6, '0'));
+
+const STATUS = {
+  live:  { color: '#27ae60', z: 1000 },
+  stale: { color: '#f39c12', z: 500  },
+  dead:  { color: '#000000', z: 0    }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────────────────────
+let map, courseLayer, markersLayer, baseLayers;
+let coursePoints = [];
+let courseDistances = [];
+const runners = {};       // id -> { id, short, latest, marker, status, finished, finishedAt }
+let polling = false;
+let lastRefresh = null, lastError = null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+function shortLabel(id) { return String(parseInt(id, 10)).padStart(2, '0'); }
+function fullName(id)   { return `Athlete ${shortLabel(id)}`; }
+function fmtAge(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return s + 's';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${s % 60}s`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+function statusOf(ts) {
+  const age = Date.now() - ts;
+  return age <= LIVE_MS ? 'live' : age <= STALE_MS ? 'stale' : 'dead';
+}
+function emojiIcon(emoji, size = 30) {
+  return L.divIcon({
+    html: `<span style="font-size:${size}px; line-height:1;">${emoji}</span>`,
+    className: '', iconAnchor: [size / 2, size / 2], popupAnchor: [0, -(size / 2)]
+  });
+}
+function markerIcon(id, status) {
+  return L.divIcon({
+    className: '',
+    html: `<div class="mk mk-${status}">${shortLabel(id)}</div>`,
+    iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -14]
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Theme
+// ─────────────────────────────────────────────────────────────────────────────
+function toggleTheme() {
+  const isDark = document.body.classList.toggle('dark-theme');
+  const on  = baseLayers[isDark ? 'Dark (CartoDB)' : 'OpenStreetMap'];
+  const off = baseLayers[isDark ? 'OpenStreetMap' : 'Dark (CartoDB)'];
+  if (map.hasLayer(off)) { map.removeLayer(off); on.addTo(map); }
+  drawProfile();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Map init
+// ─────────────────────────────────────────────────────────────────────────────
+(function () {
+  map = L.map('map').setView([42.9, -3.5], 10);
+  baseLayers = {
+    'OpenStreetMap': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 19
+    }),
+    'Satellite (Esri)': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      attribution: '© Esri, Maxar, Earthstar Geographics', maxZoom: 19
+    }),
+    'Terrain (Stadia)': L.tileLayer('https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.png', {
+      attribution: '© <a href="https://stadiamaps.com/">Stadia Maps</a>, © <a href="https://stamen.com">Stamen Design</a>, © OpenStreetMap contributors', maxZoom: 18
+    }),
+    'Topo (OpenTopoMap)': L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://opentopomap.org">OpenTopoMap</a> contributors', maxZoom: 17
+    }),
+    'Dark (CartoDB)': L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© <a href="https://carto.com/">CARTO</a>, © OpenStreetMap contributors', maxZoom: 19
+    })
+  };
+  baseLayers['OpenStreetMap'].addTo(map);
+  L.control.layers(baseLayers, {}, { position: 'topright', collapsed: true }).addTo(map);
+  courseLayer  = L.layerGroup().addTo(map);
+  markersLayer = L.layerGroup().addTo(map);
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Map resizing
+// ─────────────────────────────────────────────────────────────────────────────
+function setMapHeight(px, save = true) {
+  px = Math.max(250, Math.min(px, 2000));
+  document.documentElement.style.setProperty('--map-h', px + 'px');
+  if (save) { try { localStorage.setItem('mapHeight', px); } catch (e) {} }
+  map.invalidateSize();
+}
+function toggleMapFull(force) {
+  const on = force ?? !document.body.classList.contains('map-full');
+  document.body.classList.toggle('map-full', on);
+  setTimeout(() => { map.invalidateSize(); drawProfile(); }, 50);
+}
+function fitCourse() {
+  if (coursePoints.length) map.fitBounds(L.latLngBounds(coursePoints.map(p => [p.lat, p.lon])), { padding: [40, 40] });
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') toggleMapFull(false); });
+let resizeTimer;
+window.addEventListener('resize', () => {
+  map.invalidateSize();
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(drawProfile, 150);
+});
+
+(function initMapResize() {
+  try {
+    const saved = parseInt(localStorage.getItem('mapHeight'));
+    if (saved) setMapHeight(saved, false);
+  } catch (e) {}
+  const handle = document.getElementById('resizeHandle');
+  let startY = 0, startH = 0;
+  handle.addEventListener('pointerdown', e => {
+    startY = e.clientY;
+    startH = document.getElementById('map').offsetHeight;
+    handle.setPointerCapture(e.pointerId);
+    const move = ev => setMapHeight(startH + (ev.clientY - startY));
+    const up = () => { handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', up); };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+  });
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Geometry
+// ─────────────────────────────────────────────────────────────────────────────
+function haversine(a, b) {
+  const R = 6371000;
+  const dLat = (b.lat - a.lat) * Math.PI / 180;
+  const dLon = (b.lon - a.lon) * Math.PI / 180;
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.asin(Math.sqrt(s));
+}
+
+function snapToCourse(P) {
+  if (!coursePoints.length) return { snappedLat: P.lat, snappedLon: P.lon, courseMetres: null };
+  let bestDist = Infinity, bestLat = P.lat, bestLon = P.lon, bestM = 0;
+  for (let i = 0; i < coursePoints.length - 1; i++) {
+    const A = coursePoints[i], B = coursePoints[i + 1];
+    const dx = B.lon - A.lon, dy = B.lat - A.lat;
+    const lenSq = dx * dx + dy * dy;
+    const t = lenSq ? Math.max(0, Math.min(1, ((P.lon - A.lon) * dx + (P.lat - A.lat) * dy) / lenSq)) : 0;
+    const cLat = A.lat + t * dy, cLon = A.lon + t * dx;
+    const d = haversine(P, { lat: cLat, lon: cLon });
+    if (d < bestDist) {
+      bestDist = d; bestLat = cLat; bestLon = cLon;
+      bestM = courseDistances[i] + t * haversine(A, B);
+    }
+  }
+  return { snappedLat: bestLat, snappedLon: bestLon, courseMetres: bestM };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GPX
+// ─────────────────────────────────────────────────────────────────────────────
+async function loadGpxUrl(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`GPX HTTP ${res.status}`);
+  parseGpx(await res.text());
+}
+
+function parseGpx(text) {
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  const trkpts = [...doc.querySelectorAll('trkpt')];
+  if (!trkpts.length) throw new Error('No track points in GPX');
+
+  coursePoints = trkpts.map(pt => ({
+    lat: parseFloat(pt.getAttribute('lat')),
+    lon: parseFloat(pt.getAttribute('lon')),
+    ele: parseFloat(pt.querySelector('ele')?.textContent ?? 'NaN')
+  }));
+  courseDistances = [0];
+  for (let i = 1; i < coursePoints.length; i++)
+    courseDistances.push(courseDistances[i - 1] + haversine(coursePoints[i - 1], coursePoints[i]));
+
+  courseLayer.clearLayers();
+  const ll = coursePoints.map(p => [p.lat, p.lon]);
+  L.polyline(ll, { color: '#56eef4', weight: 10, opacity: 0.95 }).addTo(courseLayer);
+  L.marker(ll[0], { icon: emojiIcon('🚥', 32) }).bindPopup(`<b>Start</b><br>${GPX_NAME}`).addTo(courseLayer);
+  L.marker(ll.at(-1), { icon: emojiIcon('🏁', 32) }).bindPopup('<b>Finish</b>').addTo(courseLayer);
+  fitCourse();
+  drawProfile();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Data fetching: latest position of each tracker
+// ─────────────────────────────────────────────────────────────────────────────
+async function fetchLatest(id) {
+  const res = await fetch(`${API_BASE}?id=${encodeURIComponent(id)}`, { cache: 'no-store', signal: AbortSignal.timeout(8000) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json = await res.json();
+  const raw = json.data ?? (Array.isArray(json) ? json : Object.values(json));
+  if (!Array.isArray(raw) || !raw.length) return null;
+
+  let best = null;
+  for (const r of raw) {
+    const lat = r?.location?.lat ?? r?.lat ?? r?.latitude;
+    const lon = r?.location?.lon ?? r?.lon ?? r?.longitude ?? r?.lng;
+    const ts  = new Date(r?.timestamp ?? r?.time ?? r?.ts).getTime();
+    if (lat == null || lon == null || isNaN(ts)) continue;
+    if (!best || ts > best.ts) best = { lat: +lat, lon: +lon, ts };
+  }
+  return best;
+}
+
+function applyLatest(id, p) {
+  let r = runners[id];
+  if (r && r.latest.ts === p.ts) return;           // nothing new
+
+  const snap = snapToCourse(p);
+  let { snappedLat, snappedLon, courseMetres } = snap;
+  const finishM = courseDistances.length ? courseDistances.at(-1) : null;
+  let finished = r?.finished ?? false;
+  let finishedAt = r?.finishedAt ?? null;
+  if (finishM != null && courseMetres != null && finishM - courseMetres <= FINISH_THRESHOLD_M) {
+    if (!finished) { finished = true; finishedAt = p.ts; }
+  }
+  if (finished && finishM != null) {                // pin finishers to the finish line
+    const end = coursePoints.at(-1);
+    snappedLat = end.lat; snappedLon = end.lon; courseMetres = finishM;
+  }
+
+  const latest = { ...p, snappedLat, snappedLon, courseMetres };
+  const status = statusOf(p.ts);
+
+  if (!r) {
+    const marker = L.marker([snappedLat, snappedLon], { icon: markerIcon(id, status), zIndexOffset: STATUS[status].z })
+      .bindPopup(() => popupHtml(id))
+      .addTo(markersLayer);
+    r = runners[id] = { id, latest, marker, status, finished, finishedAt };
+  } else {
+    r.latest = latest; r.finished = finished; r.finishedAt = finishedAt;
+    r.marker.setLatLng([snappedLat, snappedLon]);
+  }
+}
+
+function popupHtml(id) {
+  const r = runners[id];
+  if (!r) return '';
+  const age = Date.now() - r.latest.ts;
+  const km = r.latest.courseMetres != null ? (r.latest.courseMetres / 1000).toFixed(2) + ' km' : '—';
+  return `<b>${fullName(id)}</b> ${r.finished ? '🏁' : ''}<br>BIB ${id}<br>` +
+         `Last position: ${new Date(r.latest.ts).toLocaleTimeString()} (${fmtAge(age)} ago)<br>Course: ${km}`;
+}
+
+async function poll() {
+  if (polling) return;
+  polling = true;
+  try {
+    const results = await Promise.allSettled(IDS.map(fetchLatest));
+    let failures = 0;
+    results.forEach((res, i) => {
+      if (res.status === 'rejected') { failures++; return; }
+      if (res.value) applyLatest(IDS[i], res.value);
+    });
+    lastRefresh = new Date();
+    lastError = failures === IDS.length ? 'Could not reach the API' : failures ? `${failures} request(s) failed` : null;
+  } catch (e) {
+    lastError = e.message;
+  } finally {
+    polling = false;
+    tick();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UI refresh (runs every second so ages/colours stay accurate between polls)
+// ─────────────────────────────────────────────────────────────────────────────
+function refreshStatuses() {
+  Object.values(runners).forEach(r => {
+    const st = statusOf(r.latest.ts);
+    if (st !== r.status) {
+      r.status = st;
+      r.marker.setIcon(markerIcon(r.id, st));
+      r.marker.setZIndexOffset(STATUS[st].z);
+    }
+  });
+}
+
+function updateSummary() {
+  const counts = { live: 0, stale: 0, dead: 0 };
+  Object.values(runners).forEach(r => counts[r.status]++);
+  const reporting = counts.live + counts.stale + counts.dead;
+  document.getElementById('cntLive').textContent  = counts.live;
+  document.getElementById('cntStale').textContent = counts.stale;
+  document.getElementById('cntDead').textContent  = counts.dead;
+  document.getElementById('cntNone').textContent  = IDS.length - reporting;
+  const msg = document.getElementById('sumMsg');
+  if (lastError) {
+    msg.textContent = `⚠ ${lastError}` + (lastRefresh ? ` · last refresh ${lastRefresh.toLocaleTimeString()}` : '');
+    msg.className = 'sum-msg err';
+  } else {
+    msg.textContent = lastRefresh ? `Updated ${lastRefresh.toLocaleTimeString()} · every ${POLL_MS / 1000} s` : 'Loading…';
+    msg.className = 'sum-msg';
+  }
+}
+
+function updateLeaderboard() {
+  const list = document.getElementById('lbList');
+  const entries = Object.values(runners);
+  if (!entries.length) { list.innerHTML = '<div class="lb-empty">Waiting for data…</div>'; return; }
+
+  entries.sort((a, b) => {
+    if (a.finished && b.finished) return a.finishedAt - b.finishedAt;
+    if (a.finished) return -1;
+    if (b.finished) return 1;
+    return (b.latest.courseMetres ?? -1) - (a.latest.courseMetres ?? -1);
+  });
+
+  const medals = ['🥇', '🥈', '🥉'];
+  const now = Date.now();
+  list.innerHTML = entries.map((r, i) => {
+    const km = r.latest.courseMetres != null ? (r.latest.courseMetres / 1000).toFixed(2) + ' km' : '—';
+    return `<div class="lb-row${r.finished ? ' lb-row-finished' : ''}" data-id="${r.id}">
+      <span class="lb-rank">${i < 3 ? medals[i] : i + 1}</span>
+      <span class="dot ${r.status}"></span>
+      <span class="lb-name">${r.finished ? '🏁 ' : ''}${fullName(r.id)}</span>
+      <span class="lb-km">${km}</span>
+      <span class="lb-age">${fmtAge(now - r.latest.ts)}</span>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('lbList').addEventListener('click', e => {
+  const id = e.target.closest('.lb-row')?.dataset.id;
+  const r = id && runners[id];
+  if (!r) return;
+  map.flyTo(r.marker.getLatLng(), Math.max(map.getZoom(), 15), { duration: 0.6 });
+  r.marker.openPopup();
+});
+
+function tick() {
+  refreshStatuses();
+  updateSummary();
+  updateLeaderboard();
+  drawProfileOverlay();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Elevation profile
+// ─────────────────────────────────────────────────────────────────────────────
+const PAD = { top: 18, right: 16, bottom: 28, left: 44 };
+
+function drawProfile() {
+  const card    = document.getElementById('profileCard');
+  const canvas  = document.getElementById('profileCanvas');
+  const overlay = document.getElementById('profileOverlay');
+  card.style.display = coursePoints.length ? '' : 'none';
+  if (!coursePoints.length) return;
+  const hasEle = coursePoints.some(p => !isNaN(p.ele));
+
+  const W = canvas.offsetWidth || 800;
+  const H = canvas.offsetHeight || 110;
+  canvas.width = W; canvas.height = H;
+  overlay.width = W; overlay.height = H;
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+  const totalM = courseDistances.at(-1) || 1;
+
+  if (!hasEle) {
+    ctx.strokeStyle = '#1D9E75'; ctx.lineWidth = 2; ctx.beginPath();
+    ctx.moveTo(PAD.left, H / 2); ctx.lineTo(W - PAD.right, H / 2); ctx.stroke();
+    drawProfileOverlay(); return;
+  }
+
+  const eles   = coursePoints.map(p => p.ele).filter(e => !isNaN(e));
+  const eMin   = Math.min(...eles), eMax = Math.max(...eles);
+  const eRange = eMax - eMin || 1;
+  const plotW  = W - PAD.left - PAD.right;
+  const plotH  = H - PAD.top - PAD.bottom;
+  const xOf = i => PAD.left + (courseDistances[i] / totalM) * plotW;
+  const yOf = e => PAD.top + plotH - ((e - eMin) / eRange) * plotH;
+  const isDark = document.body.classList.contains('dark-theme');
+
+  const grad = ctx.createLinearGradient(0, PAD.top, 0, PAD.top + plotH);
+  if (isDark) { grad.addColorStop(0, 'rgba(218,98,125,0.45)'); grad.addColorStop(1, 'rgba(69,9,32,0.05)'); }
+  else        { grad.addColorStop(0, 'rgba(29,158,117,0.35)'); grad.addColorStop(1, 'rgba(29,158,117,0.04)'); }
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(xOf(0), PAD.top + plotH);
+  coursePoints.forEach((p, i) => { if (!isNaN(p.ele)) ctx.lineTo(xOf(i), yOf(p.ele)); });
+  ctx.lineTo(xOf(coursePoints.length - 1), PAD.top + plotH);
+  ctx.closePath(); ctx.fill();
+
+  ctx.strokeStyle = isDark ? '#ffa5ab' : '#1D9E75'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.beginPath();
+  let first = true;
+  coursePoints.forEach((p, i) => {
+    if (isNaN(p.ele)) return;
+    first ? ctx.moveTo(xOf(i), yOf(p.ele)) : ctx.lineTo(xOf(i), yOf(p.ele));
+    first = false;
+  });
+  ctx.stroke();
+
+  ctx.fillStyle = isDark ? '#da627d' : '#aaa'; ctx.font = '11px system-ui'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let s = 0; s <= 4; s++) {
+    const e = eMin + (s / 4) * eRange, y = yOf(e);
+    ctx.fillText(Math.round(e) + 'm', PAD.left - 4, y);
+    ctx.strokeStyle = isDark ? 'rgba(255,165,171,0.08)' : 'rgba(0,0,0,0.06)'; ctx.lineWidth = 1; ctx.beginPath();
+    ctx.moveTo(PAD.left, y); ctx.lineTo(W - PAD.right, y); ctx.stroke();
+  }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = isDark ? '#da627d' : '#aaa';
+  const kmSteps = Math.max(1, Math.min(8, Math.floor(totalM / 1000)));
+  for (let k = 0; k <= kmSteps; k++) {
+    const m = (k / kmSteps) * totalM;
+    ctx.fillText((m / 1000).toFixed(1) + 'k', PAD.left + (m / totalM) * plotW, H - PAD.bottom + 4);
+  }
+  drawProfileOverlay();
+}
+
+function eleAt(m) {
+  let lo = 0, hi = courseDistances.length - 1;
+  while (lo < hi - 1) { const mid = (lo + hi) >> 1; courseDistances[mid] <= m ? lo = mid : hi = mid; }
+  const eA = coursePoints[lo].ele, eB = coursePoints[hi].ele;
+  if (isNaN(eA) || isNaN(eB)) return null;
+  const frac = (m - courseDistances[lo]) / (courseDistances[hi] - courseDistances[lo] || 1);
+  return eA + Math.max(0, Math.min(1, frac)) * (eB - eA);
+}
+
+function drawProfileOverlay() {
+  const overlay = document.getElementById('profileOverlay');
+  if (!coursePoints.length) return;
+  const W = overlay.width, H = overlay.height;
+  const ctx = overlay.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  const totalM = courseDistances.at(-1) || 1;
+  const plotW  = W - PAD.left - PAD.right;
+  const plotH  = H - PAD.top - PAD.bottom;
+  const eles   = coursePoints.map(p => p.ele).filter(e => !isNaN(e));
+  const hasEle = eles.length > 0;
+  const eMin   = hasEle ? Math.min(...eles) : 0;
+  const eRange = hasEle ? (Math.max(...eles) - eMin) || 1 : 1;
+  const labelColor = getComputedStyle(document.body).color;
+
+  Object.values(runners).forEach(r => {
+    const m = r.latest.courseMetres;
+    if (m == null) return;
+    const x = PAD.left + (m / totalM) * plotW;
+    const ele = hasEle ? eleAt(m) : null;
+    const y = ele != null ? PAD.top + plotH - ((ele - eMin) / eRange) * plotH : H / 2;
+    ctx.fillStyle = STATUS[r.status].color; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = labelColor; ctx.font = '9px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText(shortLabel(r.id), x, y - 7);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Start
+// ─────────────────────────────────────────────────────────────────────────────
+(async function start() {
+  try {
+    await loadGpxUrl(GPX_URL);
+  } catch (e) {
+    lastError = `Could not load GPX: ${e.message}`;
+    updateSummary();
+  }
+  await poll();
+  setInterval(poll, POLL_MS);
+  setInterval(tick, 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
+})();
+</script>
+</body>
+</html>
