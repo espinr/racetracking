@@ -860,14 +860,24 @@ function snapRunner(id) {
   const finishM = courseDistances.length ? courseDistances.at(-1) : null;
   r.finishedAt  = null;
   r.finishTime  = null;
+  
   if (finishM != null && r.points.length) {
-    const FINISH_THRESHOLD = 30;
+    const FINISH_THRESHOLD = 30; // meters from finish line
+    const MIN_RACE_PROGRESS = finishM * 0.75; // Safeguard: must cover 75% of track first so start-line proximity is ignored
+    let hasPassedHalfway = false;
+
     for (let i = 0; i < r.points.length; i++) {
-      if (r.points[i].courseMetres != null && (finishM - r.points[i].courseMetres) <= FINISH_THRESHOLD) {
+      const m = r.points[i].courseMetres;
+      if (m == null) continue;
+
+      if (m > MIN_RACE_PROGRESS) {
+        hasPassedHalfway = true;
+      }
+
+      if (hasPassedHalfway && (finishM - m) <= FINISH_THRESHOLD) {
         r.finishedAt = r.points[i].timestamp;
         r.finishTime = r.points[i].timestamp - r.points[0].timestamp;
-        // The inner loop clamping the marker to the finish line has been removed.
-        // Runners will now continue moving and mapping naturally past the finish line.
+        // Inner loop is removed so positions don't clamp/freeze
         break;
       }
     }
@@ -940,8 +950,11 @@ function renderFrame() {
     const trailPts = r.points.filter(p => p.timestamp <= ts).map(p => [p.snappedLat, p.snappedLon]);
     rl.trail.setLatLngs(trailPts);
     if (rl.head) { rl.head.remove(); rl.head = null; }
+    
     const finished = r.finishedAt != null && ts >= r.finishedAt;
-    const pos = finished ? interpolatePosition(id, r.finishedAt) : interpolatePosition(id, ts);
+    // Always interpolate at current 'ts' so the marker keeps moving past the finish line naturally
+    const pos = interpolatePosition(id, ts);
+    
     if (pos) {
       const mapLabel = finished ? `🏁 ${r.surname}` : r.surname;
       rl.head = L.circleMarker([pos.lat, pos.lon], {
