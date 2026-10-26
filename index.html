@@ -956,9 +956,9 @@ function renderFrame() {
     const pos = interpolatePosition(id, ts);
     
     if (pos) {
-      const mapLabel = finished ? `🏁 ${r.surname}` : r.surname;
+      const mapLabel = r.surname; 
       rl.head = L.circleMarker([pos.lat, pos.lon], {
-        radius: finished ? 9 : 8, color: '#ffffff', fillColor: r.color, fillOpacity: 1, weight: 2
+        radius: 8, color: '#ffffff', fillColor: r.color, fillOpacity: 1, weight: 2 // kept radius uniform at 8
       }).bindTooltip(mapLabel, {
         permanent: true, direction: 'top', offset: [0, -10], className: 'marker-tip', opacity: 0.95
       }).addTo(rl.group);
