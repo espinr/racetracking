@@ -163,9 +163,9 @@
 
 <div class="card">
   <div class="summary">
-    <div class="sum-item"><span class="dot live"></span>Live (≤10 s): <b id="cntLive">0</b></div>
-    <div class="sum-item"><span class="dot stale"></span>Delayed (&gt;10 s): <b id="cntStale">0</b></div>
-    <div class="sum-item"><span class="dot dead"></span>Offline (&gt;1 min): <b id="cntDead">0</b></div>
+    <div class="sum-item"><span class="dot live"></span>Live (≤30 s): <b id="cntLive">0</b></div>
+    <div class="sum-item"><span class="dot stale"></span>Delayed (&gt;30 s): <b id="cntStale">0</b></div>
+    <div class="sum-item"><span class="dot dead"></span>Offline (&gt;90 s): <b id="cntDead">0</b></div>
     <div class="sum-item"><span class="dot none"></span>No data: <b id="cntNone">0</b></div>
     <div class="sum-msg" id="sumMsg">Loading…</div>
   </div>
@@ -231,6 +231,8 @@ const STATUS = {
 let map, courseLayer, markersLayer, baseLayers;
 let coursePoints = [];
 let courseDistances = [];
+let courseHasEle = false, courseEMin = 0, courseERange = 1;   // cached once per GPX
+const SIMPLIFY_M = 5;                                         // min spacing between kept course points
 const runners = {};       // id -> { id, short, latest, marker, status, finished, finishedAt }
 let polling = false;
 let lastRefresh = null, lastError = null;
@@ -280,7 +282,7 @@ function toggleTheme() {
 // Map init
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  map = L.map('map').setView([42.9, -3.5], 10);
+  map = L.map('map', { renderer: L.canvas() }).setView([42.9, -3.5], 10);
   baseLayers = {
     'OpenStreetMap': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 19
@@ -358,22 +360,46 @@ function haversine(a, b) {
   return R * 2 * Math.asin(Math.sqrt(s));
 }
 
-function snapToCourse(P) {
-  if (!coursePoints.length) return { snappedLat: P.lat, snappedLon: P.lon, courseMetres: null };
-  let bestDist = Infinity, bestLat = P.lat, bestLon = P.lon, bestM = 0;
-  for (let i = 0; i < coursePoints.length - 1; i++) {
+// index of the last course point whose cumulative distance is <= m
+function indexAtMetres(m) {
+  let lo = 0, hi = courseDistances.length - 1;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; courseDistances[mid] <= m ? lo = mid : hi = mid - 1; }
+  return lo;
+}
+
+// Fast local (equirectangular) projection search over segments [i0, i1)
+function searchSegments(P, i0, i1) {
+  const kx = 111320 * Math.cos(P.lat * Math.PI / 180), ky = 110540;
+  let bestD2 = Infinity, bestLat = P.lat, bestLon = P.lon, bestM = 0;
+  for (let i = i0; i < i1; i++) {
     const A = coursePoints[i], B = coursePoints[i + 1];
-    const dx = B.lon - A.lon, dy = B.lat - A.lat;
+    const ax = (A.lon - P.lon) * kx, ay = (A.lat - P.lat) * ky;
+    const dx = (B.lon - A.lon) * kx, dy = (B.lat - A.lat) * ky;
     const lenSq = dx * dx + dy * dy;
-    const t = lenSq ? Math.max(0, Math.min(1, ((P.lon - A.lon) * dx + (P.lat - A.lat) * dy) / lenSq)) : 0;
-    const cLat = A.lat + t * dy, cLon = A.lon + t * dx;
-    const d = haversine(P, { lat: cLat, lon: cLon });
-    if (d < bestDist) {
-      bestDist = d; bestLat = cLat; bestLon = cLon;
-      bestM = courseDistances[i] + t * haversine(A, B);
+    const t = lenSq ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / lenSq)) : 0;
+    const cx = ax + t * dx, cy = ay + t * dy;
+    const d2 = cx * cx + cy * cy;
+    if (d2 < bestD2) {
+      bestD2 = d2;
+      bestLat = A.lat + t * (B.lat - A.lat);
+      bestLon = A.lon + t * (B.lon - A.lon);
+      bestM = courseDistances[i] + t * (courseDistances[i + 1] - courseDistances[i]);
     }
   }
-  return { snappedLat: bestLat, snappedLon: bestLon, courseMetres: bestM };
+  return { snappedLat: bestLat, snappedLon: bestLon, courseMetres: bestM, dist: Math.sqrt(bestD2) };
+}
+
+// hintM = previous position along the course; search a window around it first
+function snapToCourse(P, hintM) {
+  const n = coursePoints.length;
+  if (n < 2) return { snappedLat: P.lat, snappedLon: P.lon, courseMetres: null };
+  if (hintM != null) {
+    const i0 = indexAtMetres(Math.max(0, hintM - 500));
+    const i1 = Math.min(n - 1, indexAtMetres(hintM + 3000) + 1);
+    const r = searchSegments(P, i0, Math.max(i1, i0 + 1));
+    if (r.dist <= 100) return r;
+  }
+  return searchSegments(P, 0, n - 1);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -390,14 +416,41 @@ function parseGpx(text) {
   const trkpts = [...doc.querySelectorAll('trkpt')];
   if (!trkpts.length) throw new Error('No track points in GPX');
 
-  coursePoints = trkpts.map(pt => ({
-    lat: parseFloat(pt.getAttribute('lat')),
-    lon: parseFloat(pt.getAttribute('lon')),
-    ele: parseFloat(pt.querySelector('ele')?.textContent ?? 'NaN')
-  }));
-  courseDistances = [0];
-  for (let i = 1; i < coursePoints.length; i++)
-    courseDistances.push(courseDistances[i - 1] + haversine(coursePoints[i - 1], coursePoints[i]));
+  // Parse and simplify: keep a point only if it is >= SIMPLIFY_M from the last kept one
+  const pts = [];
+  let lastKept = null, lastRaw = null, dist = 0;
+  courseDistances = [];
+  for (let i = 0; i < trkpts.length; i++) {
+    const pt = trkpts[i];
+    const p = {
+      lat: parseFloat(pt.getAttribute('lat')),
+      lon: parseFloat(pt.getAttribute('lon')),
+      ele: parseFloat(pt.querySelector('ele')?.textContent ?? 'NaN')
+    };
+    if (isNaN(p.lat) || isNaN(p.lon)) continue;
+    lastRaw = p;
+    if (!lastKept) { pts.push(p); courseDistances.push(0); lastKept = p; continue; }
+    const d = haversine(lastKept, p);
+    if (d >= SIMPLIFY_M) { dist += d; pts.push(p); courseDistances.push(dist); lastKept = p; }
+  }
+  // always keep the true last point so the finish is exact
+  if (lastRaw && lastRaw !== lastKept) {
+    dist += haversine(lastKept, lastRaw);
+    pts.push(lastRaw); courseDistances.push(dist);
+  }
+  coursePoints = pts;
+  if (coursePoints.length < 2) throw new Error('Not enough valid track points in GPX');
+
+  // elevation range computed once (no spread: safe for any size)
+  let eMin = Infinity, eMax = -Infinity;
+  for (const p of coursePoints) {
+    if (isNaN(p.ele)) continue;
+    if (p.ele < eMin) eMin = p.ele;
+    if (p.ele > eMax) eMax = p.ele;
+  }
+  courseHasEle = eMin !== Infinity;
+  courseEMin = courseHasEle ? eMin : 0;
+  courseERange = courseHasEle ? ((eMax - eMin) || 1) : 1;
 
   courseLayer.clearLayers();
   const ll = coursePoints.map(p => [p.lat, p.lon]);
@@ -433,7 +486,7 @@ function applyLatest(id, p) {
   let r = runners[id];
   if (r && r.latest.ts === p.ts) return;           // nothing new
 
-  const snap = snapToCourse(p);
+  const snap = snapToCourse(p, r?.latest?.courseMetres ?? null);
   let { snappedLat, snappedLon, courseMetres } = snap;
   const finishM = courseDistances.length ? courseDistances.at(-1) : null;
   let finished = r?.finished ?? false;
@@ -573,7 +626,7 @@ function drawProfile() {
   const overlay = document.getElementById('profileOverlay');
   card.style.display = coursePoints.length ? '' : 'none';
   if (!coursePoints.length) return;
-  const hasEle = coursePoints.some(p => !isNaN(p.ele));
+  const hasEle = courseHasEle;
 
   const W = canvas.offsetWidth || 800;
   const H = canvas.offsetHeight || 110;
@@ -590,9 +643,8 @@ function drawProfile() {
     drawProfileOverlay(); return;
   }
 
-  const eles   = coursePoints.map(p => p.ele).filter(e => !isNaN(e));
-  const eMin   = Math.min(...eles), eMax = Math.max(...eles);
-  const eRange = eMax - eMin || 1;
+  const eMin   = courseEMin;
+  const eRange = courseERange;
   const plotW  = W - PAD.left - PAD.right;
   const plotH  = H - PAD.top - PAD.bottom;
   const xOf = i => PAD.left + (courseDistances[i] / totalM) * plotW;
@@ -653,10 +705,9 @@ function drawProfileOverlay() {
   const totalM = courseDistances.at(-1) || 1;
   const plotW  = W - PAD.left - PAD.right;
   const plotH  = H - PAD.top - PAD.bottom;
-  const eles   = coursePoints.map(p => p.ele).filter(e => !isNaN(e));
-  const hasEle = eles.length > 0;
-  const eMin   = hasEle ? Math.min(...eles) : 0;
-  const eRange = hasEle ? (Math.max(...eles) - eMin) || 1 : 1;
+  const hasEle = courseHasEle;
+  const eMin   = courseEMin;
+  const eRange = courseERange;
   const labelColor = getComputedStyle(document.body).color;
 
   Object.values(runners).forEach(r => {

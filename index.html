@@ -866,12 +866,8 @@ function snapRunner(id) {
       if (r.points[i].courseMetres != null && (finishM - r.points[i].courseMetres) <= FINISH_THRESHOLD) {
         r.finishedAt = r.points[i].timestamp;
         r.finishTime = r.points[i].timestamp - r.points[0].timestamp;
-        const fp = r.points[i];
-        for (let j = i + 1; j < r.points.length; j++) {
-          r.points[j].snappedLat   = fp.snappedLat;
-          r.points[j].snappedLon   = fp.snappedLon;
-          r.points[j].courseMetres = finishM;
-        }
+        // The inner loop clamping the marker to the finish line has been removed.
+        // Runners will now continue moving and mapping naturally past the finish line.
         break;
       }
     }
